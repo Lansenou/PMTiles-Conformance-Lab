@@ -26,3 +26,24 @@ jobs:
           cache: false
       - run: go version
       - run: ./scripts/check.sh
+
+  # A default Windows checkout (the runner's Git has core.autocrlf=true, like
+  # Git for Windows) running the documented local path in Git Bash. The race
+  # step is skipped here only; the Linux job above runs it.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: git config --show-origin --get core.autocrlf || true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go version
+      - run: SKIP_RACE=1 ./scripts/check.sh
