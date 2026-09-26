@@ -3,64 +3,102 @@ package probe
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
+	"github.com/lansenou/pmtiles-conformance-lab/internal/rangeserver"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/scenarios"
 )
 
 // TestScenarioReports pins the reference client's verdict for every scenario
-// against root-none (905 bytes, 8 present tiles). CORS scenarios pass because
-// CORS is enforced by browsers, not by HTTP clients; see examples/.
+// against every valid fixture. CORS scenarios pass because CORS is enforced
+// by browsers, not by HTTP clients; see examples/.
 func TestScenarioReports(t *testing.T) {
 	ts, rs, m := labDelay(t, 300*time.Millisecond)
-	a := archive(t, m, "root-none")
 	type fail struct {
 		Code    string
 		Request int
 	}
 	cases := []struct {
-		scenario string
-		result   string
-		requests int
-		warnings int
-		failures []fail
+		archive, scenario, result string
+		requests, warnings        int
+		failures                  []fail
 	}{
-		{"normal", "pass", 9, 0, nil},
-		{"wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
-		{"status-200-partial-body", "fail", 2, 1, []fail{{FailLength, 2}}},
-		{"truncated-body", "fail", 1, 0, []fail{{FailTruncated, 1}}},
-		{"overlong-body", "fail", 1, 0, []fail{{FailLength, 1}}},
-		{"expanded-range", "pass", 9, 8, nil},
-		{"ignore-range", "pass", 9, 9, nil},
-		{"always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
-		{"etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
-		{"slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
-		{"stall-body", "fail", 1, 0, []fail{{FailTimeout, 1}}},
-		{"cors-missing", "pass", 9, 0, nil},
-		{"cors-wrong-origin", "pass", 9, 0, nil},
-		{"cors-no-expose", "pass", 9, 0, nil},
+		{"root-none", "normal", "pass", 9, 0, nil},
+		{"root-none", "wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
+		{"root-none", "status-200-partial-body", "fail", 2, 1, []fail{{FailLength, 2}}},
+		{"root-none", "truncated-body", "fail", 1, 0, []fail{{FailTruncated, 1}}},
+		{"root-none", "overlong-body", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"root-none", "expanded-range", "pass", 9, 8, nil},
+		{"root-none", "short-range", "pass", 18, 9, nil},
+		{"root-none", "ignore-range", "pass", 9, 9, nil},
+		{"root-none", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
+		{"root-none", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
+		{"root-none", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"root-none", "stall-body", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"root-none", "cors-missing", "pass", 9, 0, nil},
+		{"root-none", "cors-wrong-origin", "pass", 9, 0, nil},
+		{"root-none", "cors-no-expose", "pass", 9, 0, nil},
+
+		{"root-gzip", "normal", "pass", 9, 0, nil},
+		{"root-gzip", "wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
+		{"root-gzip", "status-200-partial-body", "fail", 2, 1, []fail{{FailLength, 2}}},
+		{"root-gzip", "truncated-body", "fail", 1, 0, []fail{{FailTruncated, 1}}},
+		{"root-gzip", "overlong-body", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"root-gzip", "expanded-range", "pass", 9, 8, nil},
+		{"root-gzip", "short-range", "pass", 18, 9, nil},
+		{"root-gzip", "ignore-range", "pass", 9, 9, nil},
+		{"root-gzip", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
+		{"root-gzip", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
+		{"root-gzip", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"root-gzip", "stall-body", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"root-gzip", "cors-missing", "pass", 9, 0, nil},
+		{"root-gzip", "cors-wrong-origin", "pass", 9, 0, nil},
+		{"root-gzip", "cors-no-expose", "pass", 9, 0, nil},
+
+		// leaves-gzip is 29229 bytes: the first response covers bytes
+		// 0-16383 only, and a 200 body of exactly 16384 bytes is suspect.
+		{"leaves-gzip", "normal", "pass", 27, 0, nil},
+		{"leaves-gzip", "wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
+		{"leaves-gzip", "status-200-partial-body", "fail", 1, 1, []fail{{FailLength, 1}}},
+		{"leaves-gzip", "truncated-body", "fail", 1, 0, []fail{{FailTruncated, 1}}},
+		{"leaves-gzip", "overlong-body", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"leaves-gzip", "expanded-range", "pass", 27, 27, nil},
+		{"leaves-gzip", "short-range", "pass", 54, 27, nil},
+		{"leaves-gzip", "ignore-range", "pass", 27, 27, nil},
+		{"leaves-gzip", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
+		{"leaves-gzip", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
+		{"leaves-gzip", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"leaves-gzip", "stall-body", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"leaves-gzip", "cors-missing", "pass", 27, 0, nil},
+		{"leaves-gzip", "cors-wrong-origin", "pass", 27, 0, nil},
+		{"leaves-gzip", "cors-no-expose", "pass", 27, 0, nil},
 	}
-	if len(cases) != len(scenarios.All()) {
-		t.Fatalf("%d cases for %d scenarios", len(cases), len(scenarios.All()))
+	if len(cases) != 3*len(scenarios.All()) {
+		t.Fatalf("%d cases for 3 archives x %d scenarios", len(cases), len(scenarios.All()))
 	}
 	for _, c := range cases {
+		a := archive(t, m, c.archive)
 		rs.Reset()
 		lim := DefaultLimits()
 		lim.RequestTimeout = 100 * time.Millisecond
-		rep := Run(context.Background(), http.DefaultClient, ts.URL+"/scenarios/"+c.scenario+"/valid/root-none.pmtiles", a, lim)
+		rep := Run(context.Background(), http.DefaultClient, ts.URL+"/scenarios/"+c.scenario+"/"+a.File, a, lim)
 		var got []fail
 		for _, f := range rep.Failures {
 			got = append(got, fail{f.Code, f.Request})
 		}
 		if rep.Result != c.result || len(rep.Requests) != c.requests || len(rep.Warnings) != c.warnings || !reflect.DeepEqual(got, c.failures) {
-			t.Errorf("%s: result=%s requests=%d warnings=%d failures=%+v; want %s %d %d %+v",
-				c.scenario, rep.Result, len(rep.Requests), len(rep.Warnings), rep.Failures, c.result, c.requests, c.warnings, c.failures)
+			t.Errorf("%s/%s: result=%s requests=%d warnings=%d failures=%+v; want %s %d %d %+v",
+				c.archive, c.scenario, rep.Result, len(rep.Requests), len(rep.Warnings), rep.Failures, c.result, c.requests, c.warnings, c.failures)
 		}
 		if c.result == "pass" && rep.Summary.TilesMatched != len(a.Tiles) {
-			t.Errorf("%s: %d/%d tiles matched", c.scenario, rep.Summary.TilesMatched, len(a.Tiles))
+			t.Errorf("%s/%s: %d/%d tiles matched", c.archive, c.scenario, rep.Summary.TilesMatched, len(a.Tiles))
 		}
 	}
 }
@@ -104,4 +142,48 @@ func TestNormalReportExact(t *testing.T) {
 func itoa(v uint64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// TestSizeChangeAcrossRequests: a server whose complete-length changes
+// between responses is rejected at the response that changes it.
+func TestSizeChangeAcrossRequests(t *testing.T) {
+	_, _, m := lab(t)
+	a := archive(t, m, "root-none")
+	files, _, _ := fixtures.Generate()
+	var data []byte
+	for _, f := range files {
+		if f.Path == a.File {
+			data = f.Bytes
+		}
+	}
+	n := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		start, end, _ := rangeserver.ParseRange(r.Header.Get("Range"), int64(len(data)))
+		total := len(data)
+		if n == 2 {
+			total++ // same bytes, different complete-length
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, total))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(data[start : end+1])
+	}))
+	defer ts.Close()
+	rep := Run(context.Background(), http.DefaultClient, ts.URL+"/x.pmtiles", a, DefaultLimits())
+	if len(rep.Failures) != 1 || rep.Failures[0].Code != FailContentRange || rep.Failures[0].Request != 2 ||
+		!strings.Contains(rep.Failures[0].Message, "differs from") {
+		t.Fatalf("failures %+v", rep.Failures)
+	}
+}
+
+// TestShiftedRangeOnLargeArchive: on leaves-gzip the shifted Content-Range
+// (bytes 1-16384/29229) is syntactically valid, so the start check itself
+// must catch it.
+func TestShiftedRangeOnLargeArchive(t *testing.T) {
+	ts, _, m := lab(t)
+	a := archive(t, m, "leaves-gzip")
+	rep := Run(context.Background(), http.DefaultClient, ts.URL+"/scenarios/wrong-content-range/"+a.File, a, DefaultLimits())
+	if len(rep.Failures) != 1 || !strings.Contains(rep.Failures[0].Message, `"bytes 1-16384/29229" does not start within`) {
+		t.Fatalf("failures %+v", rep.Failures)
+	}
 }

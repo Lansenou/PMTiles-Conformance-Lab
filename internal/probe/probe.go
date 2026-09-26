@@ -203,6 +203,9 @@ type fetcher struct {
 	size    int64  // total archive size, learned from the first response
 	etag    string // ETag of the first response
 	head    []byte // bytes [0, len(head)) from the first response
+	// suspect200 is the seq of a first 200 response whose body length
+	// equalled the requested length, so the inferred size may be wrong.
+	suspect200 int
 }
 
 func (f *fetcher) fail(seq int, code, format string, args ...any) error {
@@ -215,6 +218,11 @@ func (f *fetcher) archiveFailure(err error) {
 		return
 	}
 	code := pmtiles.CodeOf(err)
+	if f.suspect200 != 0 && code == pmtiles.CodeSectionOutOfBounds {
+		f.rep.Failures = append(f.rep.Failures, Failure{Code: FailLength, Request: f.suspect200,
+			Message: fmt.Sprintf("status 200 body had exactly the %d requested bytes, but the archive's sections extend beyond it (%v): the 200 was probably a partial body", f.size, err)})
+		return
+	}
 	f.rep.Failures = append(f.rep.Failures, Failure{Code: FailArchive, Message: fmt.Sprintf("%s (%v)", code, err)})
 }
 
@@ -304,16 +312,26 @@ func (f *fetcher) get(off, n int64) ([]byte, error) {
 			return fail(FailContentRange, "Content-Range size %d differs from %d", total, f.size)
 		}
 		want := min(off+n-1, total-1)
-		if start > off || end < want {
-			return fail(FailContentRange, "Content-Range %q does not cover requested bytes %d-%d", r.ContentRange, off, want)
+		if start > off || end < off {
+			return fail(FailContentRange, "Content-Range %q does not start within requested bytes %d-%d", r.ContentRange, off, want)
 		}
 		if int64(len(body)) != end-start+1 {
 			return fail(FailLength, "Content-Range spans %d bytes but body has %d", end-start+1, len(body))
 		}
+		f.size = total
+		if end < want {
+			// RFC 9110 §15.3.7: a server may send a subset; the client
+			// inspects Content-Range and requests the rest.
+			f.rep.Warnings = append(f.rep.Warnings, fmt.Sprintf("request %d: server returned %q for %s; requested the remaining bytes", r.Seq, r.ContentRange, r.Range))
+			rest, err := f.get(end+1, want-end)
+			if err != nil {
+				return nil, err
+			}
+			return append(append([]byte{}, body[off-start:]...), rest...), nil
+		}
 		if start != off || end != want {
 			f.rep.Warnings = append(f.rep.Warnings, fmt.Sprintf("request %d: server returned %q for %s; used the covered bytes", r.Seq, r.ContentRange, r.Range))
 		}
-		f.size = total
 		return body[off-start : want-start+1], nil
 	case http.StatusOK:
 		// 200 carries the full representation (RFC 9110 §15.3.1).
@@ -321,6 +339,11 @@ func (f *fetcher) get(off, n int64) ([]byte, error) {
 			return fail(FailLength, "200 body has %d bytes but the archive has %d", len(body), f.size)
 		}
 		f.rep.Warnings = append(f.rep.Warnings, fmt.Sprintf("request %d: server ignored Range and sent the full %d-byte representation", r.Seq, len(body)))
+		if f.size < 0 && int64(len(body)) == n {
+			// A "full" body of exactly the requested length may really be
+			// a partial body sent with the wrong status.
+			f.suspect200 = r.Seq
+		}
 		f.size = int64(len(body))
 		if off >= f.size {
 			return []byte{}, nil

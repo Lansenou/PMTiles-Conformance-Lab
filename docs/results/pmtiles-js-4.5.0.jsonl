@@ -16,6 +16,9 @@
 {"scenario":"expanded-range","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":9,"statuses":["206","206","206","206","206","206","206","206","206"],"outcome":"wrong-bytes"}
 {"scenario":"expanded-range","archive":"root-gzip","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":9,"statuses":["206","206","206","206","206","206","206","206","206"],"outcome":"wrong-bytes"}
 {"scenario":"expanded-range","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"TypeError: ","requests":2,"statuses":["206","206"],"outcome":"error"}
+{"scenario":"short-range","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":9,"statuses":["206","206","206","206","206","206","206","206","206"],"outcome":"wrong-bytes"}
+{"scenario":"short-range","archive":"root-gzip","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":9,"statuses":["206","206","206","206","206","206","206","206","206"],"outcome":"wrong-bytes"}
+{"scenario":"short-range","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"TypeError: ","requests":2,"statuses":["206","206"],"outcome":"error"}
 {"scenario":"ignore-range","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"Error: Server returned no content-length header or content-length exceeding request. Check that your storage backend supports HTTP Byte Serving.","requests":2,"statuses":["200","200"],"outcome":"error"}
 {"scenario":"ignore-range","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"Error: Server returned no content-length header or content-length exceeding request. Check that your storage backend supports HTTP Byte Serving.","requests":2,"statuses":["200","200"],"outcome":"error"}
 {"scenario":"ignore-range","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"Error: Server returned no content-length header or content-length exceeding request. Check that your storage backend supports HTTP Byte Serving.","requests":1,"statuses":["200"],"outcome":"error"}

@@ -12,7 +12,7 @@ A 200 answer to a Range request is not treated as invalid in itself. RFC 9110 §
 
 ## Table
 
-"Probe" is the lab's reference client (`pmtiles-lab probe`) against `valid/root-none.pmtiles`, pinned in `internal/probe/scenarios_test.go`. "pmtiles.js 4.5.0" is the third-party npm client, observed with `examples/pmtiles-js/run-scenarios.mjs` on 2026-09-26 against all three valid fixtures. Raw rows are in [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl).
+"Probe" is the lab's reference client (`pmtiles-lab probe`) against `valid/root-none.pmtiles`. Its verdicts for all three valid fixtures are pinned in `internal/probe/scenarios_test.go`. "pmtiles.js 4.5.0" is the third-party npm client, observed with `examples/pmtiles-js/run-scenarios.mjs` on 2026-09-26 against all three valid fixtures. Raw rows are in [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl).
 
 | Scenario | Change (applies to) | Server response vs standards | Robust client should | Probe | pmtiles.js 4.5.0 |
 |---|---|---|---|---|---|
@@ -21,7 +21,8 @@ A 200 answer to a Range request is not treated as invalid in itself. RFC 9110 §
 | `status-200-partial-body` | 200 with only the requested bytes, no `Content-Range` (206) | deliberately invalid: a 200 body is the whole representation (§15.3.1) | notice the size contradiction | fail `length_mismatch` at request 2 | accepted; tiles correct (it deliberately tolerates short 200s) |
 | `truncated-body` | connection closed after half the body (206) | deliberately invalid message framing (RFC 9112 §6.3) | error, not short data | fail `truncated_body` at request 1 | error `TypeError: terminated` |
 | `overlong-body` | 16 extra body bytes, `Content-Range` unchanged (206) | deliberately invalid: body longer than `Content-Range` span | reject | fail `length_mismatch` at request 1 | **wrong tile bytes returned without error** (root-none, root-gzip: 8 of 11); leaf directory decode error on leaves-gzip |
-| `expanded-range` | 16 more bytes than requested, accurate `Content-Range` (206) | unusual; the client must inspect `Content-Range` (§15.3.7: "A client MUST inspect a 206 response's Content-Type and Content-Range field(s)") | use `Content-Range` or reject | pass with 8 warnings (uses the covered bytes) | **wrong tile bytes returned without error** (8 of 11); leaf directory decode error on leaves-gzip |
+| `expanded-range` | 16 more bytes than requested, accurate `Content-Range` (206) | valid but unusual: §14.2 says the 206 SHOULD correspond to the requested range, and the client MUST inspect `Content-Range` (§15.3.7: "A client MUST inspect a 206 response's Content-Type and Content-Range field(s)") | use `Content-Range` or reject | pass with 8 warnings (uses the covered bytes) | **wrong tile bytes returned without error** (8 of 11); leaf directory decode error on leaves-gzip |
+| `short-range` | 206 omitting the last byte of the requested range, accurate `Content-Range` | conforming: "a server might want to send only a subset of the data requested" (§15.3.7) | request the remaining bytes | pass, 18 requests (fetches each remainder) | **tiles one byte short, returned without error** (root-none, root-gzip: 8 of 11); leaf directory decode error on leaves-gzip |
 | `ignore-range` | full 200 for Range requests | conforming (§14.2 permits ignoring Range) | slice the full body, or fail explicitly | pass with 9 warnings | explicit error: "Check that your storage backend supports HTTP Byte Serving" |
 | `always-416` | 416 `bytes */SIZE` for every Range request | deliberately invalid for satisfiable ranges (§15.5.17) | stop with a clear error | fail `unexpected_status` at request 1 | error, but the message says "non-matching ETag" |
 | `etag-change` | ETag differs after the first GET/HEAD; bytes unchanged | each response conforms; the validator is inconsistent across requests | detect, then refetch or fail | fail `etag_changed` at request 2 (strict policy) | detects, refetches, all tiles correct (2 extra requests) |
@@ -31,7 +32,7 @@ A 200 answer to a Range request is not treated as invalid in itself. RFC 9110 §
 | `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | conforming HTTP; blocks browser reads | n/a outside browsers | pass | pass |
 | `cors-no-expose` | no `Access-Control-Expose-Headers` | conforming; `ETag` and `Content-Range` are not CORS-safelisted response headers (Fetch) | n/a outside browsers; in browsers, cope with hidden headers | pass | pass |
 
-The two bold rows are the most important observations: a client that ignores `Content-Range` and `Content-Length` returns wrong bytes silently. For `expanded-range` the server behaviour is legitimate.
+The bold rows are the most important observations: a client that ignores `Content-Range` and `Content-Length` returns wrong bytes silently. `short-range` is fully conforming server behaviour, and `expanded-range` is valid but unusual, so a reader cannot blame the server for either.
 
 ## Normal-mode lab choices
 

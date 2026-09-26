@@ -15,7 +15,7 @@ Status: v0.2.0, pre-release. See [Limits and known gaps](#limits-and-known-gaps)
 
 Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
-Example finding from the bundled sample run (pmtiles npm 4.5.0, 2026-09-26): under `overlong-body` and `expanded-range`, the client returned wrong tile bytes without an error, because it does not check `Content-Range` or `Content-Length`. RFC 9110 §15.3.7 says a client MUST inspect `Content-Range` on a 206. Details: [docs/scenarios.md](docs/scenarios.md).
+Example finding from the bundled sample run (pmtiles npm 4.5.0, 2026-09-26): under `short-range`, `overlong-body` and `expanded-range`, the client returned wrong tile bytes without an error, because it does not check `Content-Range` or `Content-Length`. `short-range` is fully conforming server behaviour: RFC 9110 §15.3.7 lets a server send a subset of the requested range, and says a client MUST inspect `Content-Range` on a 206. Details: [docs/scenarios.md](docs/scenarios.md).
 
 ## Quick start
 
@@ -123,6 +123,7 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 | `truncated-body` | connection closed after half the body | invalid framing |
 | `overlong-body` | 16 extra body bytes beyond `Content-Range` | invalid |
 | `expanded-range` | 16 more bytes than requested, accurate `Content-Range` | valid but unusual |
+| `short-range` | 206 omitting the last requested byte, accurate `Content-Range` | valid (servers may send a subset) |
 | `ignore-range` | full 200 for Range requests | valid (servers may ignore Range) |
 | `always-416` | 416 for every Range request | invalid for satisfiable ranges |
 | `etag-change` | ETag changes after the first request | each response valid; inconsistent across requests |
@@ -146,13 +147,13 @@ Two independent readers verify the valid archives: go-pmtiles v1.31.2 (all 54 ma
 |---|---|
 | Header + root directory window | 16384 bytes (spec) |
 | Compressed directory / decompressed directory or metadata | 1 MiB / 1 MiB, enforced while inflating |
-| Total decompressed directory bytes per archive | 256 MiB |
+| Total decompressed / compressed directory bytes per archive | 256 MiB / 64 MiB, charged before each read |
 | Entries per directory | 100000, checked against remaining bytes before allocation |
 | Directory depth (root = 1) | 3 |
 | Entries visited by `inspect` | 1000000 |
 | `inspect` archive size | 64 MiB |
 | `probe` per-request / total timeout, requests, body size | 5 s / 30 s, 64, 1 MiB |
-| `serve` archive bytes / trace entries / delay | 64 MiB / 1024 (ring buffer, dropped count reported) / 10 s |
+| `serve` archive bytes / trace entries / delay | 64 MiB in total, checked from file sizes before loading / 1024 (ring buffer, dropped count reported) / 10 s |
 
 The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-Range` and `Origin`. Other request headers, including credentials, are never read or logged. Request-derived fields are clipped to 1024 bytes.
 
@@ -163,7 +164,7 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 * **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS.
 * **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
-* **Probe:** it is a reference exercise with a strict policy (it fails on an ETag change and warns on a 200 or expanded 206). It is not a production client.
+* **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It is not a production client.
 
 ## Development
 

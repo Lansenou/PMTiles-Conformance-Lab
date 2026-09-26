@@ -204,3 +204,24 @@ func TestServeAndProbe(t *testing.T) {
 		t.Fatal("serve did not stop")
 	}
 }
+
+// TestServeTotalLimitBeforeLoading: the running total is checked from file
+// sizes before a file is read, so the error names the file that would cross
+// the limit and that (sparse) file is never loaded.
+func TestServeTotalLimitBeforeLoading(t *testing.T) {
+	dir := t.TempDir()
+	for name, size := range map[string]int64{"a.pmtiles": 1024, "b.pmtiles": 64 << 20} {
+		f, err := os.Create(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Truncate(size); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+	}
+	code, _, stderr := runCLI("serve", "--dir", dir)
+	if code != exitRuntime || !strings.Contains(stderr, "refusing to load b.pmtiles") {
+		t.Fatalf("exit %d %q", code, stderr)
+	}
+}

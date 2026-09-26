@@ -38,7 +38,8 @@ Not rejected by the lab reader (the spec is silent or leaves them to writers): d
 | Archive size (`inspect`) | 64 MiB | opening |
 | Compressed directory | 1 MiB | reading the leaf |
 | Decompressed directory or metadata | 1 MiB | exceeding it during inflate (output buffer never grows past limit+1) |
-| All directories decoded by one archive | 256 MiB | next decode |
+| All directories decoded by one archive | 256 MiB decompressed | next decode |
+| All directory bytes read by one archive | 64 MiB compressed | reading the next directory (stops leaf amplification: many distinct leaf ranges that each decode to almost nothing) |
 | Entries per directory | 100000, and count ≤ remaining bytes / 4 | allocating the entry slice (`malformed/too-many-entries` claims 2^40 entries) |
 | Directory depth (root = 1) | 3 | following the next leaf |
 | Entries visited by a walk | 1000000 | continuing the walk |
@@ -53,7 +54,7 @@ Fuzzing: `FuzzOpen` (seeded with every generated file) and `FuzzDecodeDirectory`
 | RFC 9110 §14.2 | "A server MAY ignore the Range header field." | lab ignores invalid syntax, unknown units, multiple ranges (200) | `internal/rangeserver` normal table |
 | RFC 9110 §14.2 | "A server MUST ignore a Range header field received with a request method that is unrecognized or for which range handling is not defined." | HEAD with Range → 200 | same |
 | RFC 9110 §14.4 / §15.3.7 | 206 carries `Content-Range: bytes first-last/complete` | yes; last clamped at EOF | same |
-| RFC 9110 §15.3.7 | "A client MUST inspect a 206 response's Content-Type and Content-Range field(s) to determine what parts are enclosed and whether additional requests are needed." | tested by `wrong-content-range`, `overlong-body`, `expanded-range` | probe tests, pmtiles.js results |
+| RFC 9110 §15.3.7 | "A client MUST inspect a 206 response's Content-Type and Content-Range field(s) to determine what parts are enclosed and whether additional requests are needed." | tested by `wrong-content-range`, `overlong-body`, `expanded-range`, `short-range` | probe tests, pmtiles.js results |
 | RFC 9110 §15.5.17 | 416 "SHOULD send a Content-Range header field with an unsatisfied-range value" (`bytes */1234`) | yes | normal table |
 | RFC 9110 §13.1, §13.2.2 | If-Match (strong, 412), If-None-Match (weak, 304), If-Range (strong ETag only; a date never matches because no Last-Modified is sent), evaluated in that order | yes | normal table |
 | Fetch: CORS-safelisted request-header | `range` is safelisted only for a single `bytes=first-` / `bytes=first-last` value; suffix ranges are not | Chromium sent no preflight for `bytes=0-15` | `examples/pmtiles-js/browser-cors.mjs` |

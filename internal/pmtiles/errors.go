@@ -24,6 +24,7 @@ const (
 	CodeDecompressionFailed    Code = "decompression_failed"
 	CodeDecompressedSizeLimit  Code = "decompressed_size_limit"
 	CodeDirectoryTooLarge      Code = "directory_too_large"
+	CodeDirectoryBudget        Code = "directory_budget_exceeded"
 	CodeVarintOverflow         Code = "varint_overflow"
 	CodeTruncatedDirectory     Code = "truncated_directory"
 	CodeEmptyDirectory         Code = "empty_directory"

@@ -92,6 +92,7 @@ Malformed / unsupported (one defect each, expected code in manifest): `bad-magic
 | Header + root directory window | 16384 bytes | spec requirement |
 | Compressed directory size | 1 MiB | lab |
 | Decompressed directory / metadata size | 1 MiB, enforced while decompressing | lab |
+| All directories of one archive | 256 MiB decompressed, 64 MiB compressed read | lab (added in review, see §14) |
 | Entries per directory | 100000, and `n <= remaining_bytes/4` checked before allocation | lab |
 | Directory depth (root = 1) | 3 | lab (spec discourages >1 leaf level) |
 | Entries visited by `inspect` | 1000000 | lab |
@@ -123,6 +124,7 @@ Each fault changes one behaviour relative to `normal`. "HTTP validity" says whet
 | `truncated-body` | 206 headers correct, connection closed after half the body | invalid framing | surface an error, not short data |
 | `overlong-body` | 206, `Content-Range` = requested, body has 16 extra bytes (`Content-Length` matches body) | invalid | reject |
 | `expanded-range` | 206 covering 16 more bytes than requested, accurate `Content-Range` | valid but unusual | use `Content-Range` or reject; never misalign |
+| `short-range` (added in review) | 206 omitting the last requested byte, accurate `Content-Range` | valid (RFC 9110 §15.3.7 subset) | request the remainder |
 | `ignore-range` | full 200 body for Range requests | valid (server may ignore Range) | slice correctly or reject explicitly |
 | `always-416` | 416 `bytes */size` for every Range request | invalid for satisfiable ranges | stop with an error, bounded retries |
 | `etag-change` | ETag changes after the first traced request; body unchanged | valid per request, inconsistent across requests | detect change, refetch or fail |
@@ -175,3 +177,4 @@ Recorded during integration; each is reflected in code, tests and docs.
 7. Probe policy: a 200 response is accepted as the full representation when it is consistent with the known size (warning). A 206 whose accurate `Content-Range` covers more than requested is accepted (warning). An ETag change fails.
 8. Trace request fields are clipped to 1024 bytes; `TraceLimit` is capped at 65536.
 9. Evidence locations: `docs/oracle.md`, `docs/scenarios.md`, `docs/conformance.md`, `docs/results/`.
+10. Independent review fixes: `Limits.MaxDirReadTotal` (64 MiB of compressed directory bytes per archive, charged before each read; new code `directory_budget_exceeded`). `serve --dir` checks the 64 MiB total from file sizes before loading. The probe requests the remainder after a short 206, and attributes a structural error to a suspicious first 200. New scenario `short-range` (conforming subset 206).

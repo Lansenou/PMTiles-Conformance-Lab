@@ -62,6 +62,11 @@ func All() []rangeserver.Scenario {
 			Mutate:      expandedRange,
 		},
 		{
+			Name: "short-range", Validity: Valid,
+			Description: "206 that omits the last byte of the requested range (ranges longer than 1 byte), with an accurate Content-Range.",
+			Mutate:      shortRange,
+		},
+		{
 			Name: "ignore-range", Validity: Valid,
 			Description: "Range is ignored: a full 200 response is sent for GET requests with a Range header.",
 			Mutate:      ignoreRange,
@@ -175,6 +180,17 @@ func overlongBody(x *rangeserver.Exchange) {
 	copy(body[n:], x.File.Data[b+1:]) // bytes after the range; zero past EOF
 	x.Resp.Body = body
 	x.Resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+}
+
+// shortRange answers with a subset of the requested range. RFC 9110 §15.3.7:
+// "a server might want to send only a subset of the data requested"; the
+// client can tell from Content-Range and request the rest.
+func shortRange(x *rangeserver.Exchange) {
+	a, b, _, ok := partial(x)
+	if !ok || b == a {
+		return
+	}
+	setRange(x, a, b-1)
 }
 
 func expandedRange(x *rangeserver.Exchange) {
