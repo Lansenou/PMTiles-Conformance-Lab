@@ -1,0 +1,238 @@
+
+### go-pmtiles build (go version -m)
+go-pmtiles: go1.26.8
+	path	github.com/protomaps/go-pmtiles
+	mod	github.com/protomaps/go-pmtiles	v1.31.2	h1:xYXagv2oKJarheCdOIGg8MvYRp8Y03MBs9jegxf4NDQ=
+
+### 1. tile command, root-gzip under ignore-range
+$ go-pmtiles tile http://127.0.0.1:18431/scenarios/ignore-range/valid/root-gzip.pmtiles 0 0 0
+exit code: 2
+stdout bytes: 0
+stderr:
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x280 pc=0x6b31ff]
+
+goroutine 1 [running]:
+compress/gzip.(*Reader).Read(0x0?, {0x3c70ad9c7000?, 0x7fd48ca22780?, 0x7fd48ca18108?})
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/compress/gzip/gunzip.go:247 +0x1f
+bufio.(*Reader).fill(0x3c70ad4f9380)
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/bufio/bufio.go:113 +0x103
+bufio.(*Reader).ReadByte(0x3c70ad4f9380)
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/bufio/bufio.go:273 +0x27
+encoding/binary.ReadUvarint({0x23de740, 0x3c70ad4f9380})
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/encoding/binary/varint.go:134 +0x82
+github.com/protomaps/go-pmtiles/pmtiles.DeserializeEntries(0x3c70ad9ba750?, 0x80?)
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/pmtiles/directory.go:337 +0x1dd
+github.com/protomaps/go-pmtiles/pmtiles.Show(0xffffffffffffffff?, {0x23dd5e0, 0x3c70ad502028}, {0x0?, 0x7fd44416e400?}, {0x3c70ad5768c0?, 0x423b9f?}, 0x0, 0x0, 0x0, ...)
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/pmtiles/show.go:137 +0x1aa5
+main.main()
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/main.go:143 +0xcc5
+lab trace:
+{
+  "limit": 1024,
+  "dropped": 0,
+  "entries": [
+    {
+      "seq": 1,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-gzip.pmtiles",
+      "range": "bytes=0-16383",
+      "status": 200,
+      "content_length": "951",
+      "etag": "\"sha256-af78eba8c9d563c7\"",
+      "bytes_sent": 951,
+      "body_sha256": "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
+      "complete": true
+    },
+    {
+      "seq": 2,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-gzip.pmtiles",
+      "range": "bytes=127-175",
+      "status": 200,
+      "content_length": "951",
+      "etag": "\"sha256-af78eba8c9d563c7\"",
+      "bytes_sent": 951,
+      "body_sha256": "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
+      "complete": true
+    }
+  ]
+}
+
+
+### 2. tile command, root-none under ignore-range (present tile 0/0/0)
+$ go-pmtiles tile http://127.0.0.1:18431/scenarios/ignore-range/valid/root-none.pmtiles 0 0 0
+exit code: 0
+stdout bytes: 0
+stderr:
+lab trace:
+{
+  "limit": 1024,
+  "dropped": 0,
+  "entries": [
+    {
+      "seq": 1,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=0-16383",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 2,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=127-152",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 3,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=127-152",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 4,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=127-152",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 5,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=127-152",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    }
+  ]
+}
+
+
+### 3. serve command backed by the lab under ignore-range
+$ go-pmtiles serve . --bucket http://127.0.0.1:18431/scenarios/ignore-range/valid --port 18432 --interface 127.0.0.1
+$ curl http://127.0.0.1:18432/root-none/0/0/0.png -> 204
+$ curl http://127.0.0.1:18432/root-gzip/0/0/0.png -> 000
+serve process exit code: 2
+serve output:
+2026/09/26 23:19:52 main.go:165: Serving http://127.0.0.1:18431/scenarios/ignore-range/valid . on port 18432 and interface 127.0.0.1 with Access-Control-Allow-Origin: 
+2026/09/26 23:19:53 server.go:156: fetching root-none 0-16384
+2026/09/26 23:19:53 server.go:200: fetched root-none 0-16384
+2026/09/26 23:19:53 server.go:156: fetching root-none 127-26
+2026/09/26 23:19:53 server.go:200: fetched root-none 127-26
+2026/09/26 23:19:53 main.go:162: served 204 %2Froot-none%2F0%2F0%2F0.png in 1.315698ms
+2026/09/26 23:19:53 server.go:156: fetching root-gzip 0-16384
+2026/09/26 23:19:53 server.go:200: fetched root-gzip 0-16384
+2026/09/26 23:19:53 server.go:156: fetching root-gzip 127-49
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x280 pc=0x6b31ff]
+
+goroutine 23 [running]:
+compress/gzip.(*Reader).Read(0x0?, {0x2d5ddd699000?, 0x7f18aee85c40?, 0x7f18f5c69108?})
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/compress/gzip/gunzip.go:247 +0x1f
+bufio.(*Reader).fill(0x2d5ddd696120)
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/bufio/bufio.go:113 +0x103
+bufio.(*Reader).ReadByte(0x2d5ddd696120)
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/bufio/bufio.go:273 +0x27
+encoding/binary.ReadUvarint({0x23de740, 0x2d5ddd696120})
+	/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64/src/encoding/binary/varint.go:134 +0x82
+github.com/protomaps/go-pmtiles/pmtiles.DeserializeEntries(0x2d5ddd682360?, 0x0?)
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/pmtiles/directory.go:337 +0x1dd
+github.com/protomaps/go-pmtiles/pmtiles.(*Server).Start.func1.1()
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/pmtiles/server.go:195 +0xf4b
+created by github.com/protomaps/go-pmtiles/pmtiles.(*Server).Start.func1 in goroutine 48
+	/root/go/pkg/mod/github.com/protomaps/go-pmtiles@v1.31.2/pmtiles/server.go:141 +0x10d9
+lab trace:
+{
+  "limit": 1024,
+  "dropped": 0,
+  "entries": [
+    {
+      "seq": 1,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=0-16383",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 2,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-none.pmtiles",
+      "range": "bytes=127-152",
+      "if_match": "\"sha256-48dcf08698d50dd6\"",
+      "status": 200,
+      "content_length": "905",
+      "etag": "\"sha256-48dcf08698d50dd6\"",
+      "bytes_sent": 905,
+      "body_sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "complete": true
+    },
+    {
+      "seq": 3,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-gzip.pmtiles",
+      "range": "bytes=0-16383",
+      "status": 200,
+      "content_length": "951",
+      "etag": "\"sha256-af78eba8c9d563c7\"",
+      "bytes_sent": 951,
+      "body_sha256": "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
+      "complete": true
+    },
+    {
+      "seq": 4,
+      "scenario": "ignore-range",
+      "method": "GET",
+      "path": "/scenarios/ignore-range/valid/root-gzip.pmtiles",
+      "range": "bytes=127-175",
+      "if_match": "\"sha256-af78eba8c9d563c7\"",
+      "status": 200,
+      "content_length": "951",
+      "etag": "\"sha256-af78eba8c9d563c7\"",
+      "bytes_sent": 951,
+      "body_sha256": "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
+      "complete": true
+    }
+  ]
+}
+
