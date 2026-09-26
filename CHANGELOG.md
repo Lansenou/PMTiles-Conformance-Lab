@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased: v0.2.0
+## Unreleased
+
+* `examples/cli-readers`: a scenario harness for any command-line reader.
+* `examples/pmtiles-rs`: a minimal wrapper around the `pmtiles` Rust crate.
+* Results for go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 across all scenarios, and a three-reader comparison in `docs/scenarios.md`.
+
+## v0.2.0
 
 First public-ready candidate.
 

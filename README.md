@@ -15,7 +15,12 @@ Status: v0.2.0, pre-release. See [Limits and known gaps](#limits-and-known-gaps)
 
 Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
-Example finding from the bundled sample run (pmtiles npm 4.5.0, 2026-09-26): under `short-range`, `overlong-body` and `expanded-range`, the client returned wrong tile bytes without an error, because it does not check `Content-Range` or `Content-Length`. `short-range` is fully conforming server behaviour: RFC 9110 §15.3.7 lets a server send a subset of the requested range, and says a client MUST inspect `Content-Range` on a 206. Details: [docs/scenarios.md](docs/scenarios.md).
+Findings from running three independent readers through every scenario (2026-09-26; details in [docs/scenarios.md](docs/scenarios.md#three-readers-compared)):
+
+* pmtiles.js 4.5.0 and the go-pmtiles 1.31.2 `tile` command return wrong tile bytes without an error under `short-range`, `overlong-body` and `expanded-range`. `short-range` is fully conforming server behaviour (RFC 9110 §15.3.7).
+* go-pmtiles 1.31.2 `tile` panics when a server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2) on a gzip archive.
+* pmtiles-rs 0.24.0 rejects every framing fault. It also rejects a conforming short 206 instead of requesting the rest.
+* None of the three validates `Content-Range`. Details: [docs/scenarios.md](docs/scenarios.md).
 
 ## Quick start
 
@@ -85,7 +90,11 @@ The server's view of the same request (`curl http://127.0.0.1:8080/__lab/trace`)
 4. After the run, `GET /__lab/trace` returns what your reader requested. Compare its ranges with `archive_offset`, `length` and `leaf_directory` in `fixtures/manifest.json`. Compare its tile bytes with the manifest `sha256`.
 5. Decide which outcome your reader should have for each scenario. [docs/scenarios.md](docs/scenarios.md) says which server responses are standards-conforming and what a robust client does.
 
-A complete harness for a JavaScript client is in [examples/pmtiles-js/run-scenarios.mjs](examples/pmtiles-js/run-scenarios.mjs). It runs the `pmtiles` npm package against every scenario and fixture and prints one JSON row each. [examples/pmtiles-js/browser-cors.mjs](examples/pmtiles-js/browser-cors.mjs) checks CORS in headless Chromium from a second origin.
+Ready-made harnesses:
+
+* [examples/pmtiles-js/run-scenarios.mjs](examples/pmtiles-js/run-scenarios.mjs) runs the `pmtiles` npm package against every scenario and fixture and prints one JSON row each.
+* [examples/cli-readers/run-scenarios.mjs](examples/cli-readers/run-scenarios.mjs) does the same for any command-line reader that prints one tile's bytes: `--cmd 'go-pmtiles tile {url} {z} {x} {y}'`, or the Rust wrapper in [examples/pmtiles-rs](examples/pmtiles-rs) (`cargo build --release`).
+* [examples/pmtiles-js/browser-cors.mjs](examples/pmtiles-js/browser-cors.mjs) checks CORS in headless Chromium from a second origin.
 
 ```sh
 cd examples/pmtiles-js && npm ci

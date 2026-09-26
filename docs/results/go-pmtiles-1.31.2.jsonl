@@ -1,0 +1,45 @@
+{"reader":"go-pmtiles-1.31.2","scenario":"normal","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"normal","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"normal","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"wrong-content-range","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"wrong-content-range","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"wrong-content-range","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"status-200-partial-body","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"200":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"status-200-partial-body","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"200":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"status-200-partial-body","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"200":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"truncated-body","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"206(aborted_by_scenario)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"truncated-body","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"206(aborted_by_scenario)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"truncated-body","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"206(aborted_by_scenario)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"overlong-body","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"overlong-body","archive":"root-gzip","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"overlong-body","archive":"leaves-gzip","tiles_ok":8,"tiles_wrong":24,"error":null,"requests":136,"statuses":{"206":136},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"expanded-range","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"expanded-range","archive":"root-gzip","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"expanded-range","archive":"leaves-gzip","tiles_ok":8,"tiles_wrong":24,"error":null,"requests":136,"statuses":{"206":136},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"short-range","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"short-range","archive":"root-gzip","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":39,"statuses":{"206":39},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"short-range","archive":"leaves-gzip","tiles_ok":8,"tiles_wrong":24,"error":null,"requests":136,"statuses":{"206":136},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"ignore-range","archive":"root-none","tiles_ok":3,"tiles_wrong":8,"error":null,"requests":55,"statuses":{"200":55},"outcome":"wrong-bytes"}
+{"reader":"go-pmtiles-1.31.2","scenario":"ignore-range","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 2: panic: runtime error: invalid memory address or nil pointer dereference","requests":2,"statuses":{"200":2},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"ignore-range","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 2: panic: runtime error: invalid memory address or nil pointer dereference","requests":2,"statuses":{"200":2},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"always-416","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"416":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"always-416","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"416":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"always-416","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1: ","requests":1,"statuses":{"416":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"etag-change","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"etag-change","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"etag-change","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"slow-headers","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"slow-headers","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"slow-headers","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"stall-body","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"stall-body","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"stall-body","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"timeout after 1000 ms","requests":1,"statuses":{"206(client_cancelled)":1},"outcome":"error"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-missing","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-missing","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-missing","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-wrong-origin","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-wrong-origin","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-wrong-origin","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-no-expose","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-no-expose","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":39,"statuses":{"206":39},"outcome":"ok"}
+{"reader":"go-pmtiles-1.31.2","scenario":"cors-no-expose","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":136,"statuses":{"206":136},"outcome":"ok"}

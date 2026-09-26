@@ -34,6 +34,46 @@ A 200 answer to a Range request is not treated as invalid in itself. RFC 9110 §
 
 The bold rows are the most important observations: a client that ignores `Content-Range` and `Content-Length` returns wrong bytes silently. `short-range` is fully conforming server behaviour, and `expanded-range` is valid but unusual, so a reader cannot blame the server for either.
 
+## Three readers compared
+
+The same 15 scenarios × 3 valid fixtures, run on 2026-09-26 against three independent PMTiles readers. Raw rows:
+- [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl): `examples/pmtiles-js/run-scenarios.mjs`, one `PMTiles` instance per run.
+- [results/go-pmtiles-1.31.2.jsonl](results/go-pmtiles-1.31.2.jsonl): `examples/cli-readers/run-scenarios.mjs` with `go-pmtiles tile URL Z X Y`, one process per tile.
+- [results/pmtiles-rs-0.24.0.jsonl](results/pmtiles-rs-0.24.0.jsonl): the same harness with `examples/pmtiles-rs`, a 40-line wrapper around the `pmtiles` crate's `HttpBackend`, one process per tile.
+
+A cell with one value means all three fixtures gave the same result. Otherwise it lists root-none / root-gzip / leaves-gzip. WRONG n/m means n of m manifest expectations got wrong bytes (or "absent" for a present tile) **without any error**. Harness timeouts are 1 s against a 2 s server delay.
+
+| Scenario | Server response | pmtiles.js 4.5.0 | go-pmtiles 1.31.2 (`tile`) | pmtiles-rs 0.24.0 |
+|---|---|---|---|---|
+| `normal` | conforming | ok | ok | ok |
+| `wrong-content-range` | invalid | ok (ignores `Content-Range`) | ok (ignores `Content-Range`) | ok (ignores `Content-Range`) |
+| `status-200-partial-body` | invalid | ok | ok | error: "Range requests unsupported" |
+| `truncated-body` | invalid framing | error | error (exit 1, no message) | error |
+| `overlong-body` | invalid | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: body longer than requested |
+| `expanded-range` | valid but unusual | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: body longer than requested |
+| `short-range` | conforming | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: fewer bytes than requested (does not fetch the rest) |
+| `ignore-range` | conforming | error (explicit "Byte Serving" message) | **WRONG 8/11** / **panic** / **panic** | error: "Range requests unsupported" |
+| `always-416` | invalid | error (misleading ETag message) | error (exit 1, no message) | error |
+| `etag-change` | inconsistent validator | ok (detects, refetches) | ok bytes, change not detected | error: "Underlying data source was modified" |
+| `slow-headers` | conforming | harness timeout | harness timeout | harness timeout |
+| `stall-body` | invalid framing | harness timeout | harness timeout | harness timeout |
+| `cors-*` (3) | browser-only effect | ok | ok | ok |
+
+What this shows:
+
+* **Silent wrong bytes are common.**
+  * Both pmtiles.js and go-pmtiles return tiles of the wrong length or content, with no error, when a 206 body does not match the requested range.
+  * This includes `short-range`, which RFC 9110 §15.3.7 explicitly permits ("a server might want to send only a subset of the data requested").
+  * pmtiles-rs checks body length against the request and fails instead. It does not request the remainder of a short 206 either, so it errors on a conforming server.
+* **go-pmtiles `tile` panics under `ignore-range`.** With a gzip archive and a server that ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2), it crashes: `panic: runtime error: invalid memory address or nil pointer dereference` in `compress/gzip.(*Reader).Read`. On the uncompressed fixture it reports present tiles as absent.
+* **ETag handling differs.**
+  * pmtiles.js detects the change and refetches.
+  * pmtiles-rs refuses to continue.
+  * go-pmtiles `tile` mixes responses with different ETags without noticing. In this scenario the bytes are unchanged, so the output is right, but a real file change would not be detected.
+* **Nobody checks `Content-Range`.** No reader validates it; in `wrong-content-range` all three succeed only because the bytes are correct.
+
+These are observations of specific versions through specific entry points (the go-pmtiles CLI `tile` command, a minimal pmtiles-rs wrapper). They are not claims about other versions or other APIs of the same projects.
+
 ## Normal-mode lab choices
 
 Strong ETag `"sha256-<first 16 hex of the file hash>"`, `Accept-Ranges: bytes`, `Content-Type: application/vnd.pmtiles`, `Cache-Control: no-store`, no `Last-Modified`. Multiple ranges get the full 200 (no multipart). Invalid syntax and unknown units are ignored (200). A suffix range on an empty file is ignored. Huge positions saturate, so a huge last-pos is clamped and a huge first-pos gives 416. CORS: `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag, Content-Range, Accept-Ranges`. Preflight gets 204 with `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`, `Access-Control-Allow-Headers: Range, If-Match, If-None-Match, If-Range` and `Access-Control-Max-Age: 60`. 404 responses also carry CORS and pass through the scenario hook. `etag-change` counts only GET/HEAD, so a browser preflight does not use up the first ETag. `always-416` and `ignore-range` do not override 304/412, which RFC 9110 §13.2.2 evaluates before Range.
