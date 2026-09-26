@@ -160,7 +160,7 @@ func malformedCases() []malformedCase {
 		},
 		{
 			name: "section-overflow", kind: "malformed", code: pmtiles.CodeSectionOutOfBounds,
-			description: fmt.Sprintf("root-none with the header's metadata offset set to 2^64-10; offset + length (%d) wraps around 2^64 to %d, which a check without overflow detection would accept as inside the %d-byte file.",
+			description: fmt.Sprintf("root-none with the header's metadata offset set to 2^64-10; offset + length (2^64-10 + %d) wraps around 2^64 to %d, which a check without overflow detection would accept as inside the %d-byte file.",
 				rn.header.MetadataLength, wrapOffset+rn.header.MetadataLength, len(rn.bytes)),
 			build: func() []byte {
 				b := baseRootNone().bytes
@@ -191,7 +191,7 @@ func malformedCases() []malformedCase {
 		},
 		{
 			name: "too-many-entries", kind: "malformed", code: pmtiles.CodeTooManyEntries,
-			description: fmt.Sprintf("root-none with the first 6 bytes of the root directory replaced by the varint 2^40 (%x): the %d-byte directory claims 1099511627776 entries.",
+			description: fmt.Sprintf("root-none with the first 6 bytes of the root directory replaced by the varint 2^40 (% x): the %d-byte directory claims 1099511627776 entries.",
 				uvarint(1<<40), rn.header.RootLength),
 			build: func() []byte {
 				b := baseRootNone().bytes
