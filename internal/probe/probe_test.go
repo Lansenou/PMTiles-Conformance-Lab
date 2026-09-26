@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/rangeserver"
@@ -14,6 +15,12 @@ import (
 // lab starts a loopback server over the generated corpus.
 func lab(t *testing.T) (*httptest.Server, *rangeserver.Server, *fixtures.Manifest) {
 	t.Helper()
+	return labDelay(t, 0)
+}
+
+// labDelay is lab with the timing scenarios' delay set.
+func labDelay(t *testing.T, delay time.Duration) (*httptest.Server, *rangeserver.Server, *fixtures.Manifest) {
+	t.Helper()
 	files, m, err := fixtures.Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +29,7 @@ func lab(t *testing.T) (*httptest.Server, *rangeserver.Server, *fixtures.Manifes
 	for _, f := range files[1:] {
 		served = append(served, rangeserver.NewFile(f.Path, f.Bytes))
 	}
-	rs, err := rangeserver.New(rangeserver.Config{Files: served, Scenarios: scenarios.All(), Default: "normal", Delay: 0})
+	rs, err := rangeserver.New(rangeserver.Config{Files: served, Scenarios: scenarios.All(), Default: "normal", Delay: delay})
 	if err != nil {
 		t.Fatal(err)
 	}
