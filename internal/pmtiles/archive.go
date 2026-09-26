@@ -17,6 +17,11 @@ type Limits struct {
 	MaxDepth            int    // directory levels, root = 1
 	MaxEntriesVisited   int    // total entries visited by Walk
 	MaxMetadataCompress uint64 // compressed metadata bytes
+	// MaxDirTotal caps the decompressed bytes of all directories one Archive
+	// decodes (root plus every distinct leaf). Without it, many small leaf
+	// entries that each inflate to MaxDecompressed bytes would multiply the
+	// work of a single Walk.
+	MaxDirTotal uint64
 }
 
 // DefaultLimits are the documented lab limits (docs/plan.md §8).
@@ -28,17 +33,33 @@ var DefaultLimits = Limits{
 	MaxDepth:            3,
 	MaxEntriesVisited:   1000000,
 	MaxMetadataCompress: 1 << 20,
+	MaxDirTotal:         256 << 20,
 }
 
 // Archive is an opened archive. It reads directories lazily through r and
-// caches decoded leaf directories by offset.
+// caches decoded leaf directories by leaf range. It is not safe for
+// concurrent use.
 type Archive struct {
-	r      io.ReaderAt
-	size   uint64
-	lim    Limits
-	Header Header
-	Root   []Entry
-	leaves map[uint64][]Entry
+	r        io.ReaderAt
+	size     uint64
+	lim      Limits
+	Header   Header
+	Root     []Entry
+	leaves   map[Range][]Entry
+	dirBytes uint64 // decompressed directory bytes decoded so far
+}
+
+// readFull reads exactly len(p) bytes at off. A short read is an error even
+// when the reader reports io.EOF.
+func readFull(r io.ReaderAt, p []byte, off uint64, what string) error {
+	n, err := r.ReadAt(p, int64(off))
+	if n == len(p) {
+		return nil
+	}
+	if err == nil || err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return fmt.Errorf("read %s: %d of %d bytes at offset %d: %w", what, n, len(p), off, err)
 }
 
 // Open reads the header and root directory. It issues one ReadAt for the
@@ -52,8 +73,8 @@ func Open(r io.ReaderAt, size uint64, lim Limits) (*Archive, error) {
 		n = RootWindow
 	}
 	buf := make([]byte, n)
-	if _, err := r.ReadAt(buf, 0); err != nil && !(err == io.EOF && uint64(len(buf)) == n) {
-		return nil, fmt.Errorf("read header: %w", err)
+	if err := readFull(r, buf, 0, "header"); err != nil {
+		return nil, err
 	}
 	h, err := DecodeHeader(buf)
 	if err != nil {
@@ -62,7 +83,7 @@ func Open(r io.ReaderAt, size uint64, lim Limits) (*Archive, error) {
 	if err := h.CheckBounds(size); err != nil {
 		return nil, err
 	}
-	a := &Archive{r: r, size: size, lim: lim, Header: h, leaves: map[uint64][]Entry{}}
+	a := &Archive{r: r, size: size, lim: lim, Header: h, leaves: map[Range][]Entry{}}
 	a.Root, err = a.decodeDir(buf[h.RootOffset:h.RootOffset+h.RootLength], "root directory")
 	if err != nil {
 		return nil, err
@@ -80,6 +101,10 @@ func (a *Archive) decodeDir(raw []byte, what string) ([]Entry, error) {
 	d, err := Decompress(a.Header.InternalCompression, raw, a.lim.MaxDecompressed)
 	if err != nil {
 		return nil, wrap(err, what)
+	}
+	a.dirBytes += uint64(len(d)) // len(d) <= MaxDecompressed, cannot overflow in practice
+	if a.dirBytes > a.lim.MaxDirTotal {
+		return nil, errf(CodeDecompressedSizeLimit, "%s: directories decoded so far total %d bytes, limit %d", what, a.dirBytes, a.lim.MaxDirTotal)
 	}
 	entries, err := DecodeDirectory(d, a.lim.MaxEntries)
 	if err != nil {
@@ -111,18 +136,24 @@ func wrap(err error, what string) error {
 	return err
 }
 
-// Leaf returns the decoded leaf directory for a leaf entry.
+// Leaf returns the decoded leaf directory for a leaf entry. Entries decoded
+// by this package are already bounds-checked; an entry built by the caller is
+// checked against the leaf section before anything is allocated.
 func (a *Archive) Leaf(e Entry) ([]Entry, error) {
-	if d, ok := a.leaves[e.Offset]; ok {
+	key := Range{e.Offset, e.Length}
+	if d, ok := a.leaves[key]; ok {
 		return d, nil
 	}
 	what := fmt.Sprintf("leaf directory at leaf offset %d", e.Offset)
+	if end, ok := addU64(e.Offset, e.Length); !ok || end > a.Header.LeafLength {
+		return nil, errf(CodeEntryOutOfBounds, "%s [%d, +%d) exceeds leaf directories length %d", what, e.Offset, e.Length, a.Header.LeafLength)
+	}
 	if e.Length > a.lim.MaxDirCompressed {
 		return nil, errf(CodeDirectoryTooLarge, "%s is %d bytes, limit %d", what, e.Length, a.lim.MaxDirCompressed)
 	}
 	raw := make([]byte, e.Length)
-	if _, err := a.r.ReadAt(raw, int64(a.Header.LeafOffset+e.Offset)); err != nil && err != io.EOF {
-		return nil, fmt.Errorf("read %s: %w", what, err)
+	if err := readFull(a.r, raw, a.Header.LeafOffset+e.Offset, what); err != nil {
+		return nil, err
 	}
 	d, err := a.decodeDir(raw, what)
 	if err != nil {
@@ -131,7 +162,7 @@ func (a *Archive) Leaf(e Entry) ([]Entry, error) {
 	if err := a.checkEntries(d, what); err != nil {
 		return nil, err
 	}
-	a.leaves[e.Offset] = d
+	a.leaves[key] = d
 	return d, nil
 }
 
@@ -181,11 +212,20 @@ func (a *Archive) Locate(z uint8, x, y uint32) (Location, error) {
 	}
 }
 
-// ReadTile returns the stored (possibly compressed) bytes at loc.
+// ReadTile returns the stored (possibly compressed) bytes at loc. A Location
+// from Locate is already inside the tile data section, which is inside the
+// archive (at most MaxFileSize bytes); a caller-built Location is checked
+// against the tile data section before allocation.
 func (a *Archive) ReadTile(loc Location) ([]byte, error) {
+	h := a.Header
+	end, ok := addU64(loc.Offset, loc.Length)
+	if !ok || loc.Offset < h.TileDataOffset || end > h.TileDataOffset+h.TileDataLength {
+		return nil, errf(CodeEntryOutOfBounds, "tile %d location [%d, +%d) is not inside tile data [%d, +%d)",
+			loc.TileID, loc.Offset, loc.Length, h.TileDataOffset, h.TileDataLength)
+	}
 	b := make([]byte, loc.Length)
-	if _, err := a.r.ReadAt(b, int64(loc.Offset)); err != nil && err != io.EOF {
-		return nil, fmt.Errorf("read tile %d: %w", loc.TileID, err)
+	if err := readFull(a.r, b, loc.Offset, fmt.Sprintf("tile %d", loc.TileID)); err != nil {
+		return nil, err
 	}
 	return b, nil
 }
@@ -196,9 +236,9 @@ func (a *Archive) Metadata() ([]byte, error) {
 	if h.MetadataLength > a.lim.MaxMetadataCompress {
 		return nil, errf(CodeDirectoryTooLarge, "metadata is %d bytes, limit %d", h.MetadataLength, a.lim.MaxMetadataCompress)
 	}
-	raw := make([]byte, h.MetadataLength)
-	if _, err := a.r.ReadAt(raw, int64(h.MetadataOffset)); err != nil && err != io.EOF {
-		return nil, fmt.Errorf("read metadata: %w", err)
+	raw := make([]byte, h.MetadataLength) // bounded above and by CheckBounds in Open
+	if err := readFull(a.r, raw, h.MetadataOffset, "metadata"); err != nil {
+		return nil, err
 	}
 	m, err := Decompress(h.InternalCompression, raw, a.lim.MaxDecompressed)
 	if err != nil {
