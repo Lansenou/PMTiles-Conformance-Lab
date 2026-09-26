@@ -3,8 +3,8 @@ package pmtiles_test
 import (
 	"bytes"
 	"compress/gzip"
+	"io"
 	"testing"
-	"time"
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/pmtiles"
 )
@@ -57,13 +57,38 @@ func TestLeafAmplificationIsBounded(t *testing.T) {
 	b = append(b, leaves...)
 	b = append(b, 0)
 
-	start := time.Now()
-	stage, _, err := check(b, pmtiles.DefaultLimits)
-	if stage != "walk" || pmtiles.CodeOf(err) != pmtiles.CodeDirectoryBudget {
-		t.Fatalf("stage %q err %v, want walk %s", stage, err, pmtiles.CodeDirectoryBudget)
+	// Deterministic bound: count the bytes the reader is asked for. A
+	// smaller budget than the default keeps the test fast under -race; the
+	// mechanism is the same.
+	lim := pmtiles.DefaultLimits
+	lim.MaxDirReadTotal = 4 << 20
+	cr := &countingReader{r: bytes.NewReader(b)}
+	a, err := pmtiles.Open(cr, uint64(len(b)), lim)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if d := time.Since(start); d > 10*time.Second {
-		t.Fatalf("walk took %s", d)
+	if _, err := a.Metadata(); err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("%d-byte archive rejected in %s: %v", len(b), time.Since(start).Round(time.Millisecond), err)
+	_, err = a.Walk()
+	if pmtiles.CodeOf(err) != pmtiles.CodeDirectoryBudget {
+		t.Fatalf("walk: %v, want %s", err, pmtiles.CodeDirectoryBudget)
+	}
+	// Open reads the 16 KiB window once, metadata once; every directory
+	// byte beyond that is charged before it is read.
+	if max := lim.MaxDirReadTotal + pmtiles.RootWindow + uint64(len(meta)); cr.n > max {
+		t.Fatalf("read %d bytes, bound %d", cr.n, max)
+	}
+	t.Logf("%d-byte archive: read %d bytes before %v", len(b), cr.n, err)
+}
+
+type countingReader struct {
+	r io.ReaderAt
+	n uint64
+}
+
+func (c *countingReader) ReadAt(p []byte, off int64) (int, error) {
+	n, err := c.r.ReadAt(p, off)
+	c.n += uint64(n)
+	return n, err
 }

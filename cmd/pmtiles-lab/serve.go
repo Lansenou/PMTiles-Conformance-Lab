@@ -126,6 +126,10 @@ func loadFiles(archive, dir string) ([]*rangeserver.File, error) {
 		if err != nil {
 			return err
 		}
+		// Recount from the bytes actually read, in case the file grew.
+		if total += int64(len(b)) - st.Size(); total > rangeserver.MaxArchiveBytes {
+			return fmt.Errorf("archives under %s exceed %d bytes in total; %s grew while loading", dir, rangeserver.MaxArchiveBytes, rel)
+		}
 		files = append(files, rangeserver.NewFile(filepath.ToSlash(rel), b))
 		return nil
 	})
