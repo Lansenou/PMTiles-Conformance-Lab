@@ -1,0 +1,13 @@
+{
+  "name": "pmtiles-lab-example-pmtiles-js",
+  "private": true,
+  "description": "Runs the pmtiles npm package against every pmtiles-lab scenario.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "scenarios": "node run-scenarios.mjs"
+  },
+  "dependencies": {
+    "pmtiles": "4.5.0"
+  }
+}
