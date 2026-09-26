@@ -1,0 +1,920 @@
+{
+  "schema": "pmtiles-lab-manifest/1",
+  "generator": {
+    "name": "pmtiles-lab",
+    "version": "0.2.0"
+  },
+  "spec": {
+    "repository": "https://github.com/protomaps/PMTiles",
+    "path": "spec/v3/spec.md",
+    "revision": "8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5",
+    "version": "3.6"
+  },
+  "archives": [
+    {
+      "name": "root-none",
+      "file": "valid/root-none.pmtiles",
+      "kind": "valid",
+      "sha256": "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
+      "size": 905,
+      "description": "Root directory only, internal compression none.",
+      "header": {
+        "internal_compression": "none",
+        "tile_compression": "none",
+        "tile_type": "png",
+        "clustered": true,
+        "min_zoom": 0,
+        "max_zoom": 2
+      },
+      "features": [
+        "root-only",
+        "contiguous-offsets",
+        "deduplicated-content",
+        "noncontiguous-offsets",
+        "run-length",
+        "absent-tiles",
+        "multi-zoom"
+      ],
+      "tiles": [
+        {
+          "z": 0,
+          "x": 0,
+          "y": 0,
+          "tile_id": 0,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 305
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 0,
+          "tile_id": 1,
+          "status": "present",
+          "content": "green",
+          "sha256": "e57ca5debbbbddad3416ab0c3aa5e50adf35138f4c7c6ce55a3866ffb5a2baac",
+          "length": 120,
+          "archive_offset": 425
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 1,
+          "tile_id": 2,
+          "status": "present",
+          "content": "blue",
+          "sha256": "021825ae507d530113e31d2bd270cd781f45a3f03919a16686612fff0b8a9b04",
+          "length": 120,
+          "archive_offset": 545
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 1,
+          "tile_id": 3,
+          "status": "absent"
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 0,
+          "tile_id": 4,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 305
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 0,
+          "tile_id": 5,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 665
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 0,
+          "tile_id": 6,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 665
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 1,
+          "tile_id": 7,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 665
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 1,
+          "tile_id": 8,
+          "status": "absent"
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 3,
+          "tile_id": 15,
+          "status": "absent"
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 0,
+          "tile_id": 20,
+          "status": "present",
+          "content": "yellow",
+          "sha256": "40d97ed233191594480d5e683ac6546092fbe0d63249895d8e03794d94d2832e",
+          "length": 120,
+          "archive_offset": 785
+        }
+      ]
+    },
+    {
+      "name": "root-gzip",
+      "file": "valid/root-gzip.pmtiles",
+      "kind": "valid",
+      "sha256": "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
+      "size": 951,
+      "description": "Same tiles as root-none; root directory and metadata gzip-compressed (stored deflate blocks).",
+      "header": {
+        "internal_compression": "gzip",
+        "tile_compression": "none",
+        "tile_type": "png",
+        "clustered": true,
+        "min_zoom": 0,
+        "max_zoom": 2
+      },
+      "features": [
+        "root-only",
+        "contiguous-offsets",
+        "deduplicated-content",
+        "noncontiguous-offsets",
+        "run-length",
+        "absent-tiles",
+        "multi-zoom",
+        "internal-gzip"
+      ],
+      "tiles": [
+        {
+          "z": 0,
+          "x": 0,
+          "y": 0,
+          "tile_id": 0,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 351
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 0,
+          "tile_id": 1,
+          "status": "present",
+          "content": "green",
+          "sha256": "e57ca5debbbbddad3416ab0c3aa5e50adf35138f4c7c6ce55a3866ffb5a2baac",
+          "length": 120,
+          "archive_offset": 471
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 1,
+          "tile_id": 2,
+          "status": "present",
+          "content": "blue",
+          "sha256": "021825ae507d530113e31d2bd270cd781f45a3f03919a16686612fff0b8a9b04",
+          "length": 120,
+          "archive_offset": 591
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 1,
+          "tile_id": 3,
+          "status": "absent"
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 0,
+          "tile_id": 4,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 351
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 0,
+          "tile_id": 5,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 711
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 0,
+          "tile_id": 6,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 711
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 1,
+          "tile_id": 7,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 711
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 1,
+          "tile_id": 8,
+          "status": "absent"
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 3,
+          "tile_id": 15,
+          "status": "absent"
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 0,
+          "tile_id": 20,
+          "status": "present",
+          "content": "yellow",
+          "sha256": "40d97ed233191594480d5e683ac6546092fbe0d63249895d8e03794d94d2832e",
+          "length": 120,
+          "archive_offset": 831
+        }
+      ]
+    },
+    {
+      "name": "leaves-gzip",
+      "file": "valid/leaves-gzip.pmtiles",
+      "kind": "valid",
+      "sha256": "b5a327ce9a6762385a695e1e5bec4a83bfa3b559780403feb3c0a2fb72cea5ce",
+      "size": 29229,
+      "description": "Root directory holds only two leaf entries; every tile is found through a gzip leaf directory. z0-z3 plus the spec example 12/3423/1763 (tile id 19078479). A 27812-byte tile at id 2 puts later tile data past the first 16 KiB.",
+      "header": {
+        "internal_compression": "gzip",
+        "tile_compression": "none",
+        "tile_type": "png",
+        "clustered": true,
+        "min_zoom": 0,
+        "max_zoom": 12
+      },
+      "features": [
+        "leaf-directories",
+        "root-leaf-entries-only",
+        "internal-gzip",
+        "contiguous-offsets",
+        "deduplicated-content",
+        "noncontiguous-offsets",
+        "run-length",
+        "absent-tiles",
+        "multi-zoom",
+        "spec-example-tile",
+        "data-beyond-16k"
+      ],
+      "tiles": [
+        {
+          "z": 0,
+          "x": 0,
+          "y": 0,
+          "tile_id": 0,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 457,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 0,
+          "tile_id": 1,
+          "status": "present",
+          "content": "green",
+          "sha256": "e57ca5debbbbddad3416ab0c3aa5e50adf35138f4c7c6ce55a3866ffb5a2baac",
+          "length": 120,
+          "archive_offset": 577,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 1,
+          "tile_id": 2,
+          "status": "present",
+          "content": "big",
+          "sha256": "82276b7a8f46f71f9ae4e0d7dd97210a165e9f850567056eb13c56c3082bdc1f",
+          "length": 27812,
+          "archive_offset": 697,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 1,
+          "tile_id": 3,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 0,
+          "tile_id": 4,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 457,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 0,
+          "tile_id": 5,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 0,
+          "tile_id": 6,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 1,
+          "tile_id": 7,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 1,
+          "tile_id": 8,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 2,
+          "tile_id": 9,
+          "status": "present",
+          "content": "blue",
+          "sha256": "021825ae507d530113e31d2bd270cd781f45a3f03919a16686612fff0b8a9b04",
+          "length": 120,
+          "archive_offset": 28629,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 3,
+          "tile_id": 10,
+          "status": "present",
+          "content": "yellow",
+          "sha256": "40d97ed233191594480d5e683ac6546092fbe0d63249895d8e03794d94d2832e",
+          "length": 120,
+          "archive_offset": 28749,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 1,
+          "y": 3,
+          "tile_id": 11,
+          "status": "present",
+          "content": "yellow",
+          "sha256": "40d97ed233191594480d5e683ac6546092fbe0d63249895d8e03794d94d2832e",
+          "length": 120,
+          "archive_offset": 28749,
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 2,
+          "y": 2,
+          "tile_id": 13,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 336,
+            "length": 56
+          }
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 3,
+          "tile_id": 15,
+          "status": "present",
+          "content": "green",
+          "sha256": "e57ca5debbbbddad3416ab0c3aa5e50adf35138f4c7c6ce55a3866ffb5a2baac",
+          "length": 120,
+          "archive_offset": 577,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 2,
+          "x": 3,
+          "y": 0,
+          "tile_id": 20,
+          "status": "present",
+          "content": "purple",
+          "sha256": "fed8a11cb917a84a06746fde6f328d5adc2549b247e288a9fe20d1ce21de6748",
+          "length": 120,
+          "archive_offset": 28869,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 0,
+          "y": 0,
+          "tile_id": 21,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 0,
+          "y": 1,
+          "tile_id": 22,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 1,
+          "y": 1,
+          "tile_id": 23,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 1,
+          "y": 0,
+          "tile_id": 24,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 2,
+          "y": 0,
+          "tile_id": 25,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 3,
+          "y": 0,
+          "tile_id": 26,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 3,
+          "y": 1,
+          "tile_id": 27,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 2,
+          "y": 1,
+          "tile_id": 28,
+          "status": "present",
+          "content": "gray",
+          "sha256": "29a36c6ab0d051a839a21102940786f8214b69f6f3a9eb251ab7ccb00478c492",
+          "length": 120,
+          "archive_offset": 28509,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 2,
+          "y": 2,
+          "tile_id": 29,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 3,
+          "y": 2,
+          "tile_id": 30,
+          "status": "present",
+          "content": "orange",
+          "sha256": "112452b3ab4ddf7a59aa2e039e399e14b04d3740405f93a8402d549537b79fff",
+          "length": 120,
+          "archive_offset": 28989,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 0,
+          "y": 5,
+          "tile_id": 40,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 457,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 2,
+          "y": 5,
+          "tile_id": 50,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 7,
+          "y": 1,
+          "tile_id": 83,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 3,
+          "x": 7,
+          "y": 0,
+          "tile_id": 84,
+          "status": "present",
+          "content": "blue",
+          "sha256": "021825ae507d530113e31d2bd270cd781f45a3f03919a16686612fff0b8a9b04",
+          "length": 120,
+          "archive_offset": 28629,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 12,
+          "x": 3422,
+          "y": 1763,
+          "tile_id": 19078478,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 12,
+          "x": 3423,
+          "y": 1763,
+          "tile_id": 19078479,
+          "status": "present",
+          "content": "cyan",
+          "sha256": "d686224339d75400d117c37d185ff7685836ab3f4f71515e2e01d0f7baa16f53",
+          "length": 120,
+          "archive_offset": 29109,
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        },
+        {
+          "z": 12,
+          "x": 3423,
+          "y": 1762,
+          "tile_id": 19078480,
+          "status": "absent",
+          "leaf_directory": {
+            "archive_offset": 392,
+            "length": 65
+          }
+        }
+      ]
+    },
+    {
+      "name": "bad-magic",
+      "file": "malformed/bad-magic.pmtiles",
+      "kind": "malformed",
+      "sha256": "0661cb333c9955451292f4d9b5e541675baf90619fa6b919e4390a904b8a7b03",
+      "size": 905,
+      "description": "root-none with the first magic byte changed from 'P' to 'X'.",
+      "expected_error": "bad_magic"
+    },
+    {
+      "name": "bad-version",
+      "file": "malformed/bad-version.pmtiles",
+      "kind": "malformed",
+      "sha256": "d1f0ffe887d0a67443ad28aa5647911002bb7472d0d1055a78d8b4d6381c5905",
+      "size": 905,
+      "description": "root-none with the spec version byte (offset 7) changed from 3 to 4.",
+      "expected_error": "unsupported_version"
+    },
+    {
+      "name": "truncated-header",
+      "file": "malformed/truncated-header.pmtiles",
+      "kind": "malformed",
+      "sha256": "55f86497291d163614c3b0e4a313c041c0678e5176fe0148925817008a2b3d51",
+      "size": 126,
+      "description": "root-none cut to its first 126 bytes, one byte short of the 127-byte header.",
+      "expected_error": "truncated_header"
+    },
+    {
+      "name": "truncated-file",
+      "file": "malformed/truncated-file.pmtiles",
+      "kind": "malformed",
+      "sha256": "8239beaae335e6ad7ad2c6ff3325bff586700ce61937ede330ad0d137bca4d1d",
+      "size": 904,
+      "description": "root-none with its final byte removed (904 of 905 bytes kept); the header still declares the original tile data length, so tile data ends 1 byte past the end of the file.",
+      "expected_error": "section_out_of_bounds"
+    },
+    {
+      "name": "truncated-directory",
+      "file": "malformed/truncated-directory.pmtiles",
+      "kind": "malformed",
+      "sha256": "b4f2143a53afd0c1c12fdcec9b88c9a3e2bdb7e1c578f2ff0ef071174c3f896d",
+      "size": 905,
+      "description": "root-none with the header's root directory length reduced from 26 to 25 bytes, so the final offset varint of the root directory runs off its end.",
+      "expected_error": "truncated_directory"
+    },
+    {
+      "name": "varint-overflow",
+      "file": "malformed/varint-overflow.pmtiles",
+      "kind": "malformed",
+      "sha256": "e15630c44d19f297a1d93973b0a08190d3f5c624ac43f651a77e0870456a7f5b",
+      "size": 905,
+      "description": "root-none with the first 10 bytes of the root directory replaced by ff ff ff ff ff ff ff ff ff 02: the entry-count varint's 10th byte is above 1, so the value needs more than 64 bits.",
+      "expected_error": "varint_overflow"
+    },
+    {
+      "name": "section-overflow",
+      "file": "malformed/section-overflow.pmtiles",
+      "kind": "malformed",
+      "sha256": "cab4ab4ece2f04c2f5813a681559fb241eeb41c78a48f6c577c407e24414dd47",
+      "size": 905,
+      "description": "root-none with the header's metadata offset set to 2^64-10; offset + length (2^64-10 + 152) wraps around 2^64 to 142, which a check without overflow detection would accept as inside the 905-byte file.",
+      "expected_error": "section_out_of_bounds"
+    },
+    {
+      "name": "root-beyond-16k",
+      "file": "malformed/root-beyond-16k.pmtiles",
+      "kind": "malformed",
+      "sha256": "34e7b4d528fdc2790987b73245d7960ca4acb9f8117459228ddffcbe1f0d9f0e",
+      "size": 17162,
+      "description": "root-none with 16257 zero bytes inserted after the header and all section offsets shifted, so the root directory starts at byte 16384, outside the first 16384 bytes.",
+      "expected_error": "root_directory_too_far"
+    },
+    {
+      "name": "empty-directory",
+      "file": "malformed/empty-directory.pmtiles",
+      "kind": "malformed",
+      "sha256": "5a07c8efc4ad31f3d6e95e91436d91adecd7c4630de6179975e8f36c6418aeaf",
+      "size": 905,
+      "description": "root-none with the root directory's entry-count varint changed from 6 to 0.",
+      "expected_error": "empty_directory"
+    },
+    {
+      "name": "too-many-entries",
+      "file": "malformed/too-many-entries.pmtiles",
+      "kind": "malformed",
+      "sha256": "7c43ea21ad532037e483d823b58ed5c2af71dbd75007d38b7fd3585e4973e20e",
+      "size": 905,
+      "description": "root-none with the first 6 bytes of the root directory replaced by the varint 2^40 (80 80 80 80 80 20): the 26-byte directory claims 1099511627776 entries.",
+      "expected_error": "too_many_entries"
+    },
+    {
+      "name": "zero-length-entry",
+      "file": "malformed/zero-length-entry.pmtiles",
+      "kind": "malformed",
+      "sha256": "e7c4f0250ea5cabb4c401fcb268ddabce93c0baaf6571d48548fcca4c4a019e8",
+      "size": 905,
+      "description": "root-none with the length of the last root entry (tile id 20) changed from 120 to 0.",
+      "expected_error": "zero_length_entry"
+    },
+    {
+      "name": "entry-out-of-bounds",
+      "file": "malformed/entry-out-of-bounds.pmtiles",
+      "kind": "malformed",
+      "sha256": "5aab884ebf37a22537c4d456423e391d126271f5ce4a1639a65b8fbdb8bc6766",
+      "size": 905,
+      "description": "root-none with the length of the last root entry (tile id 20, tile data offset 480) changed from 120 to 121, so it ends 1 byte past the 600-byte tile data section.",
+      "expected_error": "entry_out_of_bounds"
+    },
+    {
+      "name": "leaf-cycle",
+      "file": "malformed/leaf-cycle.pmtiles",
+      "kind": "malformed",
+      "sha256": "a189030c227f71b49789b859d7489917a8749c01aa652d874cff7cd97a1df481",
+      "size": 29192,
+      "description": "leaves-gzip with the second leaf directory replaced by a gzip leaf directory holding one leaf entry that points at itself (same leaf offset and length); the root entry's length is updated to match. Following it never reaches a tile.",
+      "expected_error": "directory_depth_exceeded"
+    },
+    {
+      "name": "decompression-bomb",
+      "file": "malformed/decompression-bomb.pmtiles",
+      "kind": "malformed",
+      "sha256": "a31c42fac7611b8f4bd6f80403d3b00b823f77510228850a5e882a7dccffb73e",
+      "size": 7579,
+      "description": "root-gzip with the root directory replaced by a 6677-byte gzip member (one fixed-Huffman block: literal 0, then 4096 length-258 distance-1 matches) that inflates to 1056769 zero bytes, more than the 1 MiB limit.",
+      "expected_error": "decompressed_size_limit"
+    },
+    {
+      "name": "unknown-compression",
+      "file": "malformed/unknown-compression.pmtiles",
+      "kind": "malformed",
+      "sha256": "60201d23478c1d0ecc0e17db858c7299422142dcbe45b81e9511b740b539df2d",
+      "size": 905,
+      "description": "root-none with the internal compression byte (offset 97) changed from 1 (none) to 7, a value the spec does not define.",
+      "expected_error": "unknown_compression"
+    },
+    {
+      "name": "invalid-metadata",
+      "file": "malformed/invalid-metadata.pmtiles",
+      "kind": "malformed",
+      "sha256": "8122754d83b35fd1971947e32d5819e56ef96f6a9e53f40a55337e82d945e904",
+      "size": 758,
+      "description": "root-none with the metadata replaced by the JSON array [1,2] (valid JSON, but not an object); later sections are shifted.",
+      "expected_error": "invalid_metadata"
+    },
+    {
+      "name": "unsupported-zstd",
+      "file": "unsupported/unsupported-zstd.pmtiles",
+      "kind": "unsupported",
+      "sha256": "452fbe37d1abb699ea97d8cbd81dc3d3fe4e6ad795b39d2f56c5e5126fc73be2",
+      "size": 929,
+      "description": "root-none built with internal compression zstd (4): the root directory and metadata are zstd frames of raw (uncompressed) blocks. Valid PMTiles; pmtiles-lab does not decode zstd.",
+      "expected_error": "unsupported_compression"
+    }
+  ]
+}

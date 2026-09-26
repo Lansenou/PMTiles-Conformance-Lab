@@ -113,7 +113,7 @@ func validSpecs() []spec {
 }
 
 // Generate builds the whole corpus in memory: manifest.json first, then
-// archives sorted by path.
+// archives sorted by path, then SHA256SUMS.
 func Generate() ([]File, *Manifest, error) {
 	m := &Manifest{Schema: ManifestSchema, Generator: Generator{"pmtiles-lab", Version}, Spec: specRef}
 	var files []File
@@ -149,6 +149,12 @@ func Generate() ([]File, *Manifest, error) {
 		return nil, nil, err
 	}
 	files = append([]File{{"manifest.json", append(mb, '\n')}}, files...)
+	// SHA256SUMS lets anyone check a copy with `sha256sum --check`.
+	var sums []byte
+	for _, f := range files {
+		sums = append(sums, sum(f.Bytes)+"  "+f.Path+"\n"...)
+	}
+	files = append(files, File{"SHA256SUMS", sums})
 	return files, m, nil
 }
 
