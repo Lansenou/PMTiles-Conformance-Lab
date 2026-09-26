@@ -20,8 +20,8 @@ Prior-art audit: [prior-art.md](prior-art.md).
 | Source | Pin | Use |
 |---|---|---|
 | PMTiles v3 spec | `spec/v3/spec.md` at protomaps/PMTiles commit `8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5` (blob `2de0910e60b60cdb70d35b20228900134a3bf250`, spec changelog version 3.6). License: public domain / CC0-1.0. | Format requirements |
-| RFC 9110 HTTP Semantics | https://www.rfc-editor.org/rfc/rfc9110.html | Range, 206, 416, conditional requests |
-| WHATWG Fetch | https://fetch.spec.whatwg.org/ (living standard, read 2026-09-26) | CORS, exposed headers, safelisted `Range` |
+| RFC 9110 HTTP Semantics | https://www.rfc-editor.org/rfc/rfc9110.html, read from `httpwg/httpwg.github.io` `specs/rfc9110.xml` at `03f35d852e7b64668ab08fda1a8076d6d44d17ae` (rfc-editor.org is blocked by the build environment's egress proxy) | Range, 206, 416, conditional requests |
+| WHATWG Fetch | https://fetch.spec.whatwg.org/ (living standard), read from `whatwg/fetch` `fetch.bs` at `357bd98924d94b81fbe8608192a2ee1f123b82f4` on 2026-09-26 | CORS, exposed headers, safelisted `Range` |
 | Independent oracle 1 | `github.com/protomaps/go-pmtiles` v1.31.2 (commit `a3e4951ea6a0477b784c27c1dcbfd9c130878c5a`), BSD-3-Clause, installed at check time, not vendored | `verify` / `show` / `tile` on valid fixtures |
 | Independent oracle 2 / sample client | npm `pmtiles` 4.5.0, BSD-3-Clause, installed from lockfile in `examples/pmtiles-js`, not vendored | Reads fixtures over HTTP, runs every scenario |
 | Browser check | Playwright 1.56.1 with its Chromium build | Real CORS behaviour |
@@ -92,6 +92,7 @@ Malformed / unsupported (one defect each, expected code in manifest): `bad-magic
 | Header + root directory window | 16384 bytes | spec requirement |
 | Compressed directory size | 1 MiB | lab |
 | Decompressed directory / metadata size | 1 MiB, enforced while decompressing | lab |
+| All directories of one archive | 256 MiB decompressed, 64 MiB compressed read | lab (added in review, see §14) |
 | Entries per directory | 100000, and `n <= remaining_bytes/4` checked before allocation | lab |
 | Directory depth (root = 1) | 3 | lab (spec discourages >1 leaf level) |
 | Entries visited by `inspect` | 1000000 | lab |
@@ -123,6 +124,7 @@ Each fault changes one behaviour relative to `normal`. "HTTP validity" says whet
 | `truncated-body` | 206 headers correct, connection closed after half the body | invalid framing | surface an error, not short data |
 | `overlong-body` | 206, `Content-Range` = requested, body has 16 extra bytes (`Content-Length` matches body) | invalid | reject |
 | `expanded-range` | 206 covering 16 more bytes than requested, accurate `Content-Range` | valid but unusual | use `Content-Range` or reject; never misalign |
+| `short-range` (added in review) | 206 omitting the last requested byte, accurate `Content-Range` | valid (RFC 9110 §15.3.7 subset) | request the remainder |
 | `ignore-range` | full 200 body for Range requests | valid (server may ignore Range) | slice correctly or reject explicitly |
 | `always-416` | 416 `bytes */size` for every Range request | invalid for satisfiable ranges | stop with an error, bounded retries |
 | `etag-change` | ETag changes after the first traced request; body unchanged | valid per request, inconsistent across requests | detect change, refetch or fail |
@@ -161,3 +163,18 @@ One workflow, one `ubuntu-latest` job, `timeout-minutes: 15`, `permissions: cont
 * Browser CORS rules for `Range` (safelisted since Fetch 2023) may differ in older browsers; only the pinned Chromium is claimed.
 * Timing scenarios use bounded delays; tests use short delays to stay fast.
 * Budget: no dollar figure is visible inside the session; thread count is kept at two.
+
+## 14. Changes after the contract was fixed
+
+Recorded during integration; each is reflected in code, tests and docs.
+
+1. `Limits.MaxDirTotal` (256 MiB) caps the decompressed bytes of all directories one archive decodes. This stops a fan-out of leaf entries that each inflate to 1 MiB.
+2. Generator version 0.2.0; `generate` also writes `SHA256SUMS`.
+3. `etag-change` counts only GET/HEAD requests, so a CORS preflight does not use up the first ETag.
+4. `always-416` and `ignore-range` do not override 304/412, because RFC 9110 §13.2.2 evaluates those preconditions before Range.
+5. 404 responses carry CORS headers and pass through the scenario hook (`Exchange.File` is nil).
+6. A delayed response whose client left is traced with its planned status and headers, `bytes_sent` 0 and `error: client_cancelled`.
+7. Probe policy: a 200 response is accepted as the full representation when it is consistent with the known size (warning). A 206 whose accurate `Content-Range` covers more than requested is accepted (warning). An ETag change fails.
+8. Trace request fields are clipped to 1024 bytes; `TraceLimit` is capped at 65536.
+9. Evidence locations: `docs/oracle.md`, `docs/scenarios.md`, `docs/conformance.md`, `docs/results/`.
+10. Independent review fixes: `Limits.MaxDirReadTotal` (64 MiB of compressed directory bytes per archive, charged before each read; new code `directory_budget_exceeded`). `serve --dir` checks the 64 MiB total from file sizes before loading. The probe requests the remainder after a short 206, and attributes a structural error to a suspicious first 200. New scenario `short-range` (conforming subset 206).

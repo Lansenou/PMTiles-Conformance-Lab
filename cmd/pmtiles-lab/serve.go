@@ -101,6 +101,7 @@ func loadFiles(archive, dir string) ([]*rangeserver.File, error) {
 		return []*rangeserver.File{rangeserver.NewFile(filepath.Base(archive), b)}, nil
 	}
 	var files []*rangeserver.File
+	var total int64
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".pmtiles") {
 			return err
@@ -112,9 +113,22 @@ func loadFiles(archive, dir string) ([]*rangeserver.File, error) {
 		if err != nil {
 			return err
 		}
+		// Check the running total before reading, so at most
+		// MaxArchiveBytes are ever loaded.
+		st, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		if total += st.Size(); total > rangeserver.MaxArchiveBytes {
+			return fmt.Errorf("archives under %s exceed %d bytes in total; refusing to load %s", dir, rangeserver.MaxArchiveBytes, rel)
+		}
 		b, err := readBounded(p)
 		if err != nil {
 			return err
+		}
+		// Recount from the bytes actually read, in case the file grew.
+		if total += int64(len(b)) - st.Size(); total > rangeserver.MaxArchiveBytes {
+			return fmt.Errorf("archives under %s exceed %d bytes in total; %s grew while loading", dir, rangeserver.MaxArchiveBytes, rel)
 		}
 		files = append(files, rangeserver.NewFile(filepath.ToSlash(rel), b))
 		return nil
@@ -133,7 +147,17 @@ func readBounded(p string) ([]byte, error) {
 	if st.Size() > rangeserver.MaxArchiveBytes {
 		return nil, fmt.Errorf("%s is %d bytes, limit %d", p, st.Size(), rangeserver.MaxArchiveBytes)
 	}
-	return os.ReadFile(p)
+	// Read at most the limit plus one byte even if the file grows meanwhile.
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, rangeserver.MaxArchiveBytes+1))
+	if err == nil && len(b) > rangeserver.MaxArchiveBytes {
+		err = fmt.Errorf("%s grew beyond %d bytes while reading", p, rangeserver.MaxArchiveBytes)
+	}
+	return b, err
 }
 
 func cmdScenarios(_ context.Context, args []string, stdout, stderr io.Writer) error {

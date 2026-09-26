@@ -452,6 +452,10 @@ func TestLimits(t *testing.T) {
 		{"entries visited at limit", leaves, lim(func(l *pmtiles.Limits) { l.MaxEntriesVisited = 16 }), "", ""},
 		{"directory total", leaves, lim(func(l *pmtiles.Limits) { l.MaxDirTotal = 20 }), "walk", pmtiles.CodeDecompressedSizeLimit},
 		{"directory total on root", rootNone, lim(func(l *pmtiles.Limits) { l.MaxDirTotal = 25 }), "open", pmtiles.CodeDecompressedSizeLimit},
+		// leaves-gzip: root 32 compressed bytes + two leaves, 121 bytes in total.
+		{"directory read total on root", leaves, lim(func(l *pmtiles.Limits) { l.MaxDirReadTotal = 31 }), "open", pmtiles.CodeDirectoryBudget},
+		{"directory read total", leaves, lim(func(l *pmtiles.Limits) { l.MaxDirReadTotal = 152 }), "walk", pmtiles.CodeDirectoryBudget},
+		{"directory read total at limit", leaves, lim(func(l *pmtiles.Limits) { l.MaxDirReadTotal = 153 }), "", ""},
 	}
 	for _, c := range cases {
 		stage, _, err := check(c.b, c.lim)

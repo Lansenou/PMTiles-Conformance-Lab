@@ -22,6 +22,11 @@ type Limits struct {
 	// entries that each inflate to MaxDecompressed bytes would multiply the
 	// work of a single Walk.
 	MaxDirTotal uint64
+	// MaxDirReadTotal caps the compressed bytes of all directories one
+	// Archive reads. It bounds the work of a walk over many distinct leaf
+	// ranges that each decompress to very little (for example, padding made
+	// of empty deflate blocks).
+	MaxDirReadTotal uint64
 }
 
 // DefaultLimits are the documented lab limits (docs/plan.md §8).
@@ -34,6 +39,7 @@ var DefaultLimits = Limits{
 	MaxEntriesVisited:   1000000,
 	MaxMetadataCompress: 1 << 20,
 	MaxDirTotal:         256 << 20,
+	MaxDirReadTotal:     64 << 20,
 }
 
 // Archive is an opened archive. It reads directories lazily through r and
@@ -47,6 +53,18 @@ type Archive struct {
 	Root     []Entry
 	leaves   map[Range][]Entry
 	dirBytes uint64 // decompressed directory bytes decoded so far
+	dirRead  uint64 // compressed directory bytes read so far
+}
+
+// chargeRead counts n compressed directory bytes against MaxDirReadTotal
+// before they are read or decompressed.
+func (a *Archive) chargeRead(n uint64, what string) error {
+	total, ok := addU64(a.dirRead, n)
+	if !ok || total > a.lim.MaxDirReadTotal {
+		return errf(CodeDirectoryBudget, "%s: reading %d more directory bytes would exceed the %d-byte total", what, n, a.lim.MaxDirReadTotal)
+	}
+	a.dirRead = total
+	return nil
 }
 
 // readFull reads exactly len(p) bytes at off. A short read is an error even
@@ -84,6 +102,9 @@ func Open(r io.ReaderAt, size uint64, lim Limits) (*Archive, error) {
 		return nil, err
 	}
 	a := &Archive{r: r, size: size, lim: lim, Header: h, leaves: map[Range][]Entry{}}
+	if err := a.chargeRead(h.RootLength, "root directory"); err != nil {
+		return nil, err
+	}
 	a.Root, err = a.decodeDir(buf[h.RootOffset:h.RootOffset+h.RootLength], "root directory")
 	if err != nil {
 		return nil, err
@@ -150,6 +171,9 @@ func (a *Archive) Leaf(e Entry) ([]Entry, error) {
 	}
 	if e.Length > a.lim.MaxDirCompressed {
 		return nil, errf(CodeDirectoryTooLarge, "%s is %d bytes, limit %d", what, e.Length, a.lim.MaxDirCompressed)
+	}
+	if err := a.chargeRead(e.Length, what); err != nil {
+		return nil, err
 	}
 	raw := make([]byte, e.Length)
 	if err := readFull(a.r, raw, a.Header.LeafOffset+e.Offset, what); err != nil {

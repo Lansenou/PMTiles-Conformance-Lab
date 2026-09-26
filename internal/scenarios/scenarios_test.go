@@ -118,7 +118,7 @@ func (l *lab) waitTrace(t *testing.T, n int) rangeserver.Trace {
 
 var documented = []string{
 	"normal", "wrong-content-range", "status-200-partial-body", "truncated-body", "overlong-body",
-	"expanded-range", "ignore-range", "always-416", "etag-change", "slow-headers", "stall-body",
+	"expanded-range", "short-range", "ignore-range", "always-416", "etag-change", "slow-headers", "stall-body",
 	"cors-missing", "cors-wrong-origin", "cors-no-expose",
 }
 
@@ -148,6 +148,7 @@ func TestNamesAndValidity(t *testing.T) {
 	want := map[string]string{
 		"normal": Valid, "wrong-content-range": Invalid, "status-200-partial-body": Invalid,
 		"truncated-body": Invalid, "overlong-body": Invalid, "expanded-range": ValidUnusual,
+		"short-range":  Valid,
 		"ignore-range": Valid, "always-416": Invalid, "etag-change": ValidUnusual, "slow-headers": Valid,
 		"stall-body": Invalid, "cors-missing": ValidBlocksJS, "cors-wrong-origin": ValidBlocksJS, "cors-no-expose": Valid,
 	}
@@ -227,6 +228,9 @@ func TestScenariosExact(t *testing.T) {
 		{sc: "expanded-range", method: "GET", rng: "bytes=-10", status: 206, header: part(974, 999, 1000), body: data[974:], complete: true},
 		{sc: "expanded-range", method: "GET", rng: "bytes=5-", status: 206, header: part(0, 999, 1000), body: data, complete: true},
 		{sc: "expanded-range", method: "GET", rng: "bytes=0-", status: 206, header: part(0, 999, 1000), body: data, complete: true},
+		{sc: "short-range", method: "GET", rng: "bytes=100-199", status: 206, header: part(100, 198, 1000), body: data[100:199], complete: true},
+		{sc: "short-range", method: "GET", rng: "bytes=990-", status: 206, header: part(990, 998, 1000), body: data[990:999], complete: true},
+		{sc: "short-range", method: "GET", rng: "bytes=7-7", status: 206, header: part(7, 7, 1000), body: data[7:8], complete: true},
 		{sc: "ignore-range", method: "GET", rng: "bytes=100-199", status: 200, header: full, body: data, complete: true},
 		{sc: "ignore-range", method: "GET", rng: "bytes=5000-", status: 200, header: full, body: data, complete: true},
 		{sc: "ignore-range", method: "GET", rng: "bytes=100-199", extra: hdr("If-None-Match", etag), status: 304, header: get(), complete: true},
@@ -500,6 +504,7 @@ func TestOneChangeAtATime(t *testing.T) {
 		"truncated-body":          {"range": {body, rerr}},
 		"overlong-body":           {"range": {cl, body}},
 		"expanded-range":          {"range": {cl, cr, body}},
+		"short-range":             {"range": {cl, cr, body}},
 		"ignore-range":            {"range": {st, cl, cr, body}},
 		"always-416":              {"range": {st, cl, cr, ctyp, body}, "invalid": {st, cl, cr, ctyp, body}},
 		"etag-change": merge(each([]string{"get", "range", "head", "invalid"}, et),
