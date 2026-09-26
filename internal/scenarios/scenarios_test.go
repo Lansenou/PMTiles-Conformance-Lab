@@ -360,20 +360,25 @@ func TestETagChangeSequence(t *testing.T) {
 }
 
 func TestSlowHeaders(t *testing.T) {
+	// Deadlines are far apart so scheduling load cannot reorder them: the
+	// impatient client gives up after 1 s against a 10 s server delay (the
+	// server stops as soon as the client cancels), and the patient client
+	// allows 10 s for a 200 ms delay.
 	const delay = 200 * time.Millisecond
+	slow := newLab(t, rangeserver.MaxDelay)
 	l := newLab(t, delay)
 	data := l.file.Data
 
 	// Client gives up before the headers arrive.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	_, err := l.do(ctx, t, "GET", "slow-headers", hdr("Range", "bytes=0-9"))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	_, err := slow.do(ctx, t, "GET", "slow-headers", hdr("Range", "bytes=0-9"))
 	cancel()
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("short timeout: %v", err)
 	}
-	e := l.waitTrace(t, 1).Entries[0]
+	e := slow.waitTrace(t, 1).Entries[0]
 	want := rangeserver.TraceEntry{Seq: 1, Scenario: "slow-headers", Method: "GET", Path: "/scenarios/slow-headers/" + path, Range: "bytes=0-9",
-		Status: 206, ContentRange: "bytes 0-9/1000", ContentLength: "10", ETag: l.file.ETag, Error: rangeserver.TraceClientCancelled}
+		Status: 206, ContentRange: "bytes 0-9/1000", ContentLength: "10", ETag: slow.file.ETag, Error: rangeserver.TraceClientCancelled}
 	if e != want {
 		t.Fatalf("trace\n got %+v\nwant %+v", e, want)
 	}
@@ -381,7 +386,7 @@ func TestSlowHeaders(t *testing.T) {
 	// A patient client succeeds, no earlier than the delay.
 	for _, m := range []string{"GET", "HEAD"} {
 		l.srv.Reset()
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 		o, err := l.do(ctx, t, m, "slow-headers", hdr("Range", "bytes=0-9"))
 		cancel()
 		wantBody := data[:10]
@@ -396,17 +401,17 @@ func TestSlowHeaders(t *testing.T) {
 		}
 	}
 	// OPTIONS is not delayed.
-	l.srv.Reset()
-	o, err := l.do(context.Background(), t, "OPTIONS", "slow-headers", nil)
-	if err != nil || o.status != 204 || o.elapsed >= delay {
+	slow.srv.Reset()
+	o, err := slow.do(context.Background(), t, "OPTIONS", "slow-headers", nil)
+	if err != nil || o.status != 204 || o.elapsed >= rangeserver.MaxDelay {
 		t.Fatalf("OPTIONS: %v %v", err, o.elapsed)
 	}
 }
 
 func TestStallBody(t *testing.T) {
 	// Client cancels while the server stalls; the server delay is only an
-	// upper bound here.
-	l := newLab(t, 300*time.Millisecond)
+	// upper bound here, set far above any scheduling latency.
+	l := newLab(t, rangeserver.MaxDelay)
 	data := l.file.Data
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, "GET", l.url("stall-body"), nil)
@@ -432,7 +437,7 @@ func TestStallBody(t *testing.T) {
 	if e := l.waitTrace(t, 1).Entries[0]; e != want {
 		t.Fatalf("trace\n got %+v\nwant %+v", e, want)
 	}
-	if el := time.Since(start); el >= 300*time.Millisecond {
+	if el := time.Since(start); el >= rangeserver.MaxDelay {
 		t.Errorf("cancel took %v", el)
 	}
 
@@ -449,8 +454,10 @@ func TestStallBody(t *testing.T) {
 
 // TestOneChangeAtATime compares every fault scenario with normal for the
 // same requests and asserts that exactly the intended aspects differ.
+// "slow" means at least delay elapsed; delay is well above the latency of an
+// undelayed loopback request on a loaded machine.
 func TestOneChangeAtATime(t *testing.T) {
-	const delay = 100 * time.Millisecond
+	const delay = 500 * time.Millisecond
 	l := newLab(t, delay)
 	etag := l.file.ETag
 	type request struct {

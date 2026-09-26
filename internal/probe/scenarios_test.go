@@ -19,8 +19,14 @@ import (
 // TestScenarioReports pins the reference client's verdict for every scenario
 // against every valid fixture. CORS scenarios pass because CORS is enforced
 // by browsers, not by HTTP clients; see examples/.
+//
+// Ordinary scenarios run with the default 5 s request timeout, so a loaded
+// machine cannot turn a pass into a timeout. The timing scenarios hold the
+// response for rangeserver.MaxDelay (10 s) but the client gives up after
+// timingTimeout; the server stops waiting as soon as the client cancels.
 func TestScenarioReports(t *testing.T) {
-	ts, rs, m := labDelay(t, 300*time.Millisecond)
+	const timingTimeout = 500 * time.Millisecond
+	ts, rs, m := labDelay(t, rangeserver.MaxDelay)
 	type fail struct {
 		Code    string
 		Request int
@@ -87,7 +93,9 @@ func TestScenarioReports(t *testing.T) {
 		a := archive(t, m, c.archive)
 		rs.Reset()
 		lim := DefaultLimits()
-		lim.RequestTimeout = 100 * time.Millisecond
+		if c.scenario == "slow-headers" || c.scenario == "stall-body" {
+			lim.RequestTimeout = timingTimeout
+		}
 		rep := Run(context.Background(), http.DefaultClient, ts.URL+"/scenarios/"+c.scenario+"/"+a.File, a, lim)
 		var got []fail
 		for _, f := range rep.Failures {
