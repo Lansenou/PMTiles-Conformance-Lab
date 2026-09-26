@@ -183,6 +183,15 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 
 It runs `gofmt`, `go vet`, `go test ./...`, `go test -race ./...`, regenerates the corpus and diffs it with `fixtures/`, checks `SHA256SUMS`, and runs 10 s smoke runs of each fuzzer. Tests bind only `127.0.0.1` ephemeral ports and use no network or secrets.
 
+**Windows.** Use a normal Git for Windows clone (the default `core.autocrlf=true` is fine: `.gitattributes` checks every text file out with LF and leaves the fixture corpus untouched) and run the same script from Git Bash:
+
+```sh
+./scripts/check.sh               # with cgo and a C compiler (race detector runs)
+SKIP_RACE=1 ./scripts/check.sh   # Go without a C compiler: every gate except -race
+```
+
+Without a C compiler `go test -race` cannot run; the script stops with a hint rather than skipping silently. CI runs this script on `ubuntu-latest` (all gates, including `-race`) and on `windows-latest` from a default autocrlf checkout with `SKIP_RACE=1`. In PowerShell or cmd, build the CLI as `go build -o pmtiles-lab.exe ./cmd/pmtiles-lab`; the quick start above otherwise applies unchanged. macOS is not tested in CI.
+
 Manual checks that need registries, not run in CI:
 
 * `scripts/oracle-go-pmtiles.sh`: the independent go-pmtiles oracle.
