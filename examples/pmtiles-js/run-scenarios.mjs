@@ -49,7 +49,14 @@ for (const sc of scenarios) {
     } catch (e) {
       row.error = `${e.name}: ${e.message}`.slice(0, 160);
     }
-    const trace = await (await fetch(`${base}/__lab/trace`)).json();
+    // A timed-out request is traced when the server finishes it (bounded by
+    // the server's --delay), so wait for in-flight requests to land.
+    let trace;
+    for (let i = 0; i < 40; i++) {
+      trace = await (await fetch(`${base}/__lab/trace`)).json();
+      if (!row.error || trace.entries.length > 0) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
     row.requests = trace.entries.length;
     row.statuses = trace.entries.map((e) => e.status + (e.error ? `(${e.error})` : ""));
     row.outcome = row.error ? "error" : row.tiles_wrong ? "wrong-bytes" : "ok";
