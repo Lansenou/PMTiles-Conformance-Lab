@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,20 +20,23 @@ type Scenario struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Validity    string `json:"http_validity"`
-	// ETag, if set, returns the entity tag for the n-th request (1-based,
-	// counted per scenario since the last reset).
+	// ETag, if set, returns the entity tag in effect for the n-th counted
+	// request (1-based). Only GET and HEAD requests for an existing file are
+	// counted, per scenario, since the last reset. Preconditions are
+	// evaluated against the returned tag.
 	ETag func(n int, base string) string `json:"-"`
-	// Mutate, if set, changes the planned response.
+	// Mutate, if set, changes the planned response in place (*x.Resp).
 	Mutate func(x *Exchange) `json:"-"`
 }
 
 // Exchange is passed to Scenario.Mutate.
 type Exchange struct {
 	Req   Request
-	File  *File
-	N     int           // per-scenario request number, 1-based
+	File  *File         // nil when the path names no file (Resp is a 404)
+	N     int           // per-scenario counted request number, 1-based; 0 if not counted
 	Delay time.Duration // configured scenario delay
 	Resp  *Response
+	ETag  string // entity tag in effect; "" when File is nil
 }
 
 // Limits for the server.
@@ -47,7 +52,7 @@ type Config struct {
 	Scenarios  []Scenario
 	Default    string        // scenario used for "/<file>" URLs
 	Delay      time.Duration // used by timing scenarios; capped at MaxDelay
-	TraceLimit int           // 0 means DefaultTraceLimit
+	TraceLimit int           // 0 means DefaultTraceLimit; capped at MaxTraceLimit
 }
 
 // Server is an http.Handler. It is safe for concurrent use.
@@ -71,6 +76,9 @@ func New(cfg Config) (*Server, error) {
 		if strings.HasPrefix(f.Path, "__lab") || strings.HasPrefix(f.Path, "scenarios/") || f.Path == "" {
 			return nil, fmt.Errorf("file path %q is reserved", f.Path)
 		}
+		if _, dup := s.files[f.Path]; dup {
+			return nil, fmt.Errorf("duplicate file path %q", f.Path)
+		}
 		total += len(f.Data)
 		s.files[f.Path] = f
 	}
@@ -78,6 +86,12 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("archives total %d bytes, limit %d", total, MaxArchiveBytes)
 	}
 	for _, sc := range cfg.Scenarios {
+		if sc.Name == "" || strings.Contains(sc.Name, "/") {
+			return nil, fmt.Errorf("invalid scenario name %q", sc.Name)
+		}
+		if _, dup := s.scenarios[sc.Name]; dup {
+			return nil, fmt.Errorf("duplicate scenario %q", sc.Name)
+		}
 		s.scenarios[sc.Name] = sc
 		s.order = append(s.order, sc)
 	}
@@ -90,7 +104,7 @@ func New(cfg Config) (*Server, error) {
 	if limit <= 0 {
 		limit = DefaultTraceLimit
 	}
-	s.trace = &traceBuf{limit: limit}
+	s.trace = &traceBuf{limit: min(limit, MaxTraceLimit)}
 	return s, nil
 }
 
@@ -116,33 +130,64 @@ func (s *Server) Reset() {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.URL.Path {
-	case "/__lab/trace":
-		writeJSON(w, s.Trace())
-		return
-	case "/__lab/reset":
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		s.Reset()
-		w.WriteHeader(http.StatusNoContent)
-		return
-	case "/__lab/scenarios":
-		writeJSON(w, s.order)
+	if r.URL.Path == "/__lab" || strings.HasPrefix(r.URL.Path, "/__lab/") {
+		s.serveLab(w, r)
 		return
 	}
 	s.serveArchive(w, r)
 }
 
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
+// serveLab handles the lab endpoints. They are never traced.
+func (s *Server) serveLab(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", "*")
+	h.Set("Cache-Control", "no-store")
+	empty := func(status int, allow string) {
+		if allow != "" {
+			h.Set("Allow", allow)
+		}
+		if bodyAllowed(status) {
+			h.Set("Content-Length", "0")
+		}
+		w.WriteHeader(status)
+	}
+	var v any
+	switch r.URL.Path {
+	case "/__lab/trace":
+		v = s.Trace()
+	case "/__lab/scenarios":
+		v = s.order
+		if s.order == nil {
+			v = []Scenario{}
+		}
+	case "/__lab/reset":
+		if r.Method != http.MethodPost {
+			empty(http.StatusMethodNotAllowed, "POST")
+			return
+		}
+		s.Reset()
+		empty(http.StatusNoContent, "")
+		return
+	default:
+		empty(http.StatusNotFound, "")
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		empty(http.StatusMethodNotAllowed, "GET, HEAD")
+		return
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		empty(http.StatusInternalServerError, "")
+		return
+	}
+	b = append(b, '\n')
+	h.Set("Content-Type", "application/json")
+	h.Set("Content-Length", strconv.Itoa(len(b)))
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(b)
+	}
 }
 
 // route maps a URL path to scenario and file.
@@ -166,41 +211,67 @@ func (s *Server) serveArchive(w http.ResponseWriter, r *http.Request) {
 		IfNoneMatch: r.Header.Get("If-None-Match"), IfRange: r.Header.Get("If-Range"),
 		Origin: r.Header.Get("Origin"),
 	}
-	seq := s.trace.seq()
+	seq, gen := s.trace.seq()
 	sc, f := s.route(r.URL.Path)
-	te := TraceEntry{Seq: seq, Scenario: sc.Name, Method: req.Method, Path: req.Path, Range: req.Range,
-		IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch, IfRange: req.IfRange, Origin: req.Origin}
-	defer func() { s.trace.add(te) }()
+	te := TraceEntry{Seq: seq, Scenario: clip(sc.Name), Method: clip(req.Method), Path: clip(req.Path),
+		Range: clip(req.Range), IfMatch: clip(req.IfMatch), IfNoneMatch: clip(req.IfNoneMatch),
+		IfRange: clip(req.IfRange), Origin: clip(req.Origin)}
+	// The entry is recorded by write (commit) just before the response can
+	// end, and finalized here; deferred so that it is also recorded when
+	// write aborts with http.ErrAbortHandler.
+	committed := false
+	commit := func() { s.trace.add(gen, te); committed = true }
+	defer func() {
+		if committed {
+			s.trace.update(gen, te)
+		} else {
+			s.trace.add(gen, te)
+		}
+	}()
 
+	x := &Exchange{Req: req, File: f, Delay: s.delay}
 	if f == nil {
-		w.Header().Set("Content-Length", "0")
-		w.WriteHeader(http.StatusNotFound)
-		te.Status, te.Complete = http.StatusNotFound, true
-		return
+		x.Resp = notFound()
+	} else {
+		if req.Method == http.MethodGet || req.Method == http.MethodHead {
+			s.mu.Lock()
+			s.counts[sc.Name]++
+			x.N = s.counts[sc.Name]
+			s.mu.Unlock()
+		}
+		x.ETag = f.ETag
+		if sc.ETag != nil && x.N > 0 {
+			x.ETag = sc.ETag(x.N, f.ETag)
+		}
+		x.Resp = Plan(req, f, x.ETag)
 	}
-	s.mu.Lock()
-	s.counts[sc.Name]++
-	n := s.counts[sc.Name]
-	s.mu.Unlock()
-
-	etag := f.ETag
-	if sc.ETag != nil {
-		etag = sc.ETag(n, f.ETag)
-	}
-	resp := Plan(req, f, etag)
 	if sc.Mutate != nil {
-		sc.Mutate(&Exchange{Req: req, File: f, N: n, Delay: s.delay, Resp: resp})
+		sc.Mutate(x)
 	}
+	resp := x.Resp
 	te.Status = resp.Status
 	te.ContentRange = resp.Header.Get("Content-Range")
-	te.ContentLength = resp.Header.Get("Content-Length")
 	te.ETag = resp.Header.Get("ETag")
-	s.write(w, r, resp, &te)
+	if bodyAllowed(resp.Status) { // net/http drops Content-Length otherwise
+		te.ContentLength = resp.Header.Get("Content-Length")
+	}
+	s.write(w, r, resp, &te, commit)
 }
 
-// write sends resp, applying delay/cut/stall, and records what was sent.
-// Aborts use http.ErrAbortHandler, which closes the connection without a log.
-func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, te *TraceEntry) {
+// bodyAllowed mirrors net/http: 1xx, 204 and 304 responses carry no body
+// and no Content-Length on the wire.
+func bodyAllowed(status int) bool {
+	return (status < 100 || status > 199) && status != http.StatusNoContent && status != http.StatusNotModified
+}
+
+// write sends resp, applying delay/cut/stall, and records what was sent in
+// te. For a response that runs to completion, commit is called with te
+// already describing the complete response before its last body byte (or,
+// without a body, its headers) is flushed, so a client that has seen the
+// whole response always finds its trace entry; a later failure is fixed up
+// by the caller. Aborts use http.ErrAbortHandler, which closes the
+// connection without a log, after te is final; no other panic is raised.
+func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, te *TraceEntry, commit func()) {
 	ctx := r.Context()
 	if resp.Delay > 0 {
 		t := time.NewTimer(min(resp.Delay, MaxDelay))
@@ -208,7 +279,9 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 		case <-ctx.Done():
 			t.Stop()
 			te.Error = TraceClientCancelled
-			return
+			// Nothing was written; abort rather than let net/http send an
+			// implicit empty 200.
+			panic(http.ErrAbortHandler)
 		case <-t.C:
 		}
 	}
@@ -217,9 +290,10 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 	}
 	w.WriteHeader(resp.Status)
 	body := resp.Body
-	if r.Method == http.MethodHead {
+	if r.Method == http.MethodHead || !bodyAllowed(resp.Status) {
 		body = nil
 	}
+	rc := http.NewResponseController(w)
 	send := func(b []byte) bool {
 		n, err := w.Write(b)
 		te.BytesSent += n
@@ -229,27 +303,37 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 		}
 		return true
 	}
-	finish := func() {
-		if te.BytesSent > 0 {
-			h := sha256.Sum256(body[:te.BytesSent])
+	flushed := func() bool {
+		if err := rc.Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			te.Error = TraceWriteError
+			return false
+		}
+		return true
+	}
+	hashed := 0 // te.BodySHA256 describes body[:hashed]
+	hash := func() {
+		if te.BytesSent == hashed {
+			return
+		}
+		hashed = te.BytesSent
+		te.BodySHA256 = ""
+		if hashed > 0 {
+			h := sha256.Sum256(body[:hashed])
 			te.BodySHA256 = hex.EncodeToString(h[:])
 		}
 	}
-	defer finish()
+	defer hash()
 	switch {
 	case resp.CutAfter >= 0 && resp.CutAfter < len(body):
-		if send(body[:resp.CutAfter]) {
-			flush(w)
+		if send(body[:resp.CutAfter]) && flushed() {
 			te.Error = TraceAborted
 		}
-		finish()
 		panic(http.ErrAbortHandler)
 	case resp.StallAfter >= 0 && resp.StallAfter < len(body):
-		if !send(body[:resp.StallAfter]) {
-			return
+		if !send(body[:resp.StallAfter]) || !flushed() {
+			panic(http.ErrAbortHandler)
 		}
-		flush(w)
-		t := time.NewTimer(min(resp.StallFor, MaxDelay))
+		t := time.NewTimer(min(max(resp.StallFor, 0), MaxDelay))
 		select {
 		case <-ctx.Done():
 			t.Stop()
@@ -257,16 +341,20 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 		case <-t.C:
 			te.Error = TraceAborted
 		}
-		finish()
 		panic(http.ErrAbortHandler)
 	}
-	if send(body) {
-		te.Complete = true
+	last := max(len(body)-1, 0)
+	if !send(body[:last]) {
+		return
 	}
-}
-
-func flush(w http.ResponseWriter) {
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+	rest := len(body) - last
+	te.BytesSent += rest // provisional: as if the rest is delivered
+	te.Complete = true
+	hash()
+	commit()
+	te.BytesSent -= rest
+	te.Complete = false
+	if send(body[last:]) && flushed() {
+		te.Complete = true
 	}
 }
