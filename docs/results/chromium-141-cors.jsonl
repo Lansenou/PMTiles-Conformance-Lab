@@ -1,0 +1,9 @@
+{"scenario":"normal","variant":"range-only","match":true,"observed":{"ok":true,"status":206,"etagVisible":true,"contentRangeVisible":true,"bytes":16},"server_saw":["GET 206"]}
+{"scenario":"normal","variant":"with-preflight","match":true,"observed":{"ok":true,"status":206,"etagVisible":true,"contentRangeVisible":true,"bytes":16},"server_saw":["OPTIONS 204","GET 206"]}
+{"scenario":"cors-missing","variant":"range-only","match":true,"observed":{"ok":false,"error":"TypeError: Failed to fetch"},"server_saw":["GET 206"]}
+{"scenario":"cors-missing","variant":"with-preflight","match":true,"observed":{"ok":false,"error":"TypeError: Failed to fetch"},"server_saw":["OPTIONS 204"]}
+{"scenario":"cors-wrong-origin","variant":"range-only","match":true,"observed":{"ok":false,"error":"TypeError: Failed to fetch"},"server_saw":["GET 206"]}
+{"scenario":"cors-wrong-origin","variant":"with-preflight","match":true,"observed":{"ok":false,"error":"TypeError: Failed to fetch"},"server_saw":["OPTIONS 204"]}
+{"scenario":"cors-no-expose","variant":"range-only","match":true,"observed":{"ok":true,"status":206,"etagVisible":false,"contentRangeVisible":false,"bytes":16},"server_saw":["GET 206"]}
+{"scenario":"cors-no-expose","variant":"with-preflight","match":true,"observed":{"ok":true,"status":206,"etagVisible":false,"contentRangeVisible":false,"bytes":16},"server_saw":["OPTIONS 204","GET 206"]}
+{"browser":"chromium 141.0.7390.37","page_origin":"http://127.0.0.1:PORT","failed":0}
