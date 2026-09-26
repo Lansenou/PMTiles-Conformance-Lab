@@ -36,6 +36,12 @@ type built struct {
 	leaves  []byte
 	data    []byte
 	entries []pmtiles.Entry
+	// rootEntries is the root directory as the builder laid it out: tile
+	// entries, or leaf entries whose offsets are relative to the leaf
+	// section.
+	rootEntries []pmtiles.Entry
+	// offsets maps a content key to its offset inside the tile data section.
+	offsets map[string]uint64
 }
 
 // contents are the named tile blobs. Keys are stable.
@@ -45,6 +51,12 @@ var contents = map[string][]byte{
 	"blue":   solidPNG(4, 4, 0x30, 0x50, 0xd0),
 	"gray":   solidPNG(4, 4, 0x80, 0x80, 0x80),
 	"yellow": solidPNG(4, 4, 0xe0, 0xc0, 0x20),
+	"purple": solidPNG(4, 4, 0x80, 0x40, 0xb0),
+	"orange": solidPNG(4, 4, 0xf0, 0x80, 0x20),
+	"cyan":   solidPNG(4, 4, 0x20, 0xc0, 0xd0),
+	// big (96x96, 27812 bytes) pushes every tile stored after it past the
+	// first 16 KiB of the archive.
+	"big": solidPNG(96, 96, 0x20, 0x80, 0x80),
 }
 
 func compress(c pmtiles.Compression, b []byte) []byte {
@@ -53,6 +65,8 @@ func compress(c pmtiles.Compression, b []byte) []byte {
 		return b
 	case pmtiles.CompressionGzip:
 		return gzipStored(b)
+	case pmtiles.CompressionZstd:
+		return zstdRaw(b)
 	}
 	panic(fmt.Sprintf("generator cannot compress with %v", c))
 }
@@ -60,8 +74,9 @@ func compress(c pmtiles.Compression, b []byte) []byte {
 // buildEntries sorts tiles by id, deduplicates content (later tiles point
 // back at the first copy) and merges consecutive ids with equal content into
 // runs. Data is laid out in order of first appearance, so the archive is
-// clustered.
-func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, int) {
+// clustered. It returns the entries, the tile data section and the offset of
+// each content key inside it.
+func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, map[string]uint64) {
 	type item struct {
 		id      uint64
 		content string
@@ -75,6 +90,11 @@ func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, int) {
 		items[i] = item{id, t.content}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
+	for i := 1; i < len(items); i++ {
+		if items[i].id == items[i-1].id {
+			panic(fmt.Sprintf("tile id %d listed twice", items[i].id))
+		}
+	}
 	var data []byte
 	offsets := map[string]uint64{}
 	var entries []pmtiles.Entry
@@ -98,7 +118,7 @@ func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, int) {
 		}
 		entries = append(entries, pmtiles.Entry{TileID: it.id, Offset: off, Length: uint64(len(blob)), RunLength: 1})
 	}
-	return entries, data, len(offsets)
+	return entries, data, offsets
 }
 
 func metadataFor(s spec) []byte {
@@ -117,8 +137,14 @@ func metadataFor(s spec) []byte {
 
 // assemble lays out header, root, metadata, leaves, tile data in spec order.
 func assemble(h pmtiles.Header, root, meta, leaves, data []byte) []byte {
+	return assemblePadded(h, 0, root, meta, leaves, data)
+}
+
+// assemblePadded is assemble with pad zero bytes between the header and the
+// root directory. Only the root-beyond-16k fixture uses pad > 0.
+func assemblePadded(h pmtiles.Header, pad int, root, meta, leaves, data []byte) []byte {
 	h.Version = pmtiles.SpecVersion
-	h.RootOffset = pmtiles.HeaderLen
+	h.RootOffset = pmtiles.HeaderLen + uint64(pad)
 	h.RootLength = uint64(len(root))
 	h.MetadataOffset = h.RootOffset + h.RootLength
 	h.MetadataLength = uint64(len(meta))
@@ -127,14 +153,22 @@ func assemble(h pmtiles.Header, root, meta, leaves, data []byte) []byte {
 	h.TileDataOffset = h.LeafOffset + h.LeafLength
 	h.TileDataLength = uint64(len(data))
 	out := h.Encode()
+	out = append(out, make([]byte, pad)...)
 	for _, s := range [][]byte{root, meta, leaves, data} {
 		out = append(out, s...)
 	}
 	return out
 }
 
-func build(s spec) built {
-	entries, data, blobs := buildEntries(s.tiles)
+func build(s spec) built { return buildWith(s, nil) }
+
+// leafHook may replace the encoded bytes of leaf directory i. off is the
+// leaf's offset inside the leaf section and firstID the TileID its root entry
+// will carry. Only malformed variants use it.
+type leafHook func(i int, off, firstID uint64, enc []byte) []byte
+
+func buildWith(s spec, hook leafHook) built {
+	entries, data, offsets := buildEntries(s.tiles)
 	var addressed uint64
 	minZ, maxZ := uint8(255), uint8(0)
 	for _, e := range entries {
@@ -146,7 +180,7 @@ func build(s spec) built {
 	h := pmtiles.Header{
 		AddressedTiles:      addressed,
 		TileEntries:         uint64(len(entries)),
-		TileContents:        uint64(blobs),
+		TileContents:        uint64(len(offsets)),
 		Clustered:           1,
 		InternalCompression: s.compression,
 		TileCompression:     pmtiles.CompressionNone,
@@ -166,6 +200,9 @@ func build(s spec) built {
 		for i := 0; i < len(entries); i += s.leafSize {
 			chunk := entries[i:min(i+s.leafSize, len(entries))]
 			enc := compress(s.compression, pmtiles.EncodeDirectory(chunk))
+			if hook != nil {
+				enc = hook(len(rootEntries), uint64(len(leaves)), chunk[0].TileID, enc)
+			}
 			rootEntries = append(rootEntries, pmtiles.Entry{TileID: chunk[0].TileID, Offset: uint64(len(leaves)), Length: uint64(len(enc))})
 			leaves = append(leaves, enc...)
 		}
@@ -177,5 +214,6 @@ func build(s spec) built {
 	if err != nil {
 		panic(err)
 	}
-	return built{bytes: b, header: hdr, rootRaw: rootRaw, meta: meta, leaves: leaves, data: data, entries: entries}
+	return built{bytes: b, header: hdr, rootRaw: rootRaw, meta: meta, leaves: leaves, data: data, entries: entries,
+		rootEntries: rootEntries, offsets: offsets}
 }

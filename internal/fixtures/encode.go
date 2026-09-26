@@ -70,3 +70,107 @@ func solidPNG(w, h int, r, g, b byte) []byte {
 	out = chunk(out, "IDAT", zlibStored(raw))
 	return chunk(out, "IEND", nil)
 }
+
+// zstdRaw returns a Zstandard frame (RFC 8878) holding b in raw
+// (uncompressed) blocks: single-segment, 4-byte frame content size, no
+// dictionary, no checksum. It is a valid zstd stream that needs no entropy
+// coder to produce.
+func zstdRaw(b []byte) []byte {
+	const maxBlock = 128 << 10
+	out := []byte{0x28, 0xb5, 0x2f, 0xfd} // magic 0xFD2FB528, little-endian
+	out = append(out, 0xa0)               // FCS flag 2 (4 bytes), single segment
+	out = binary.LittleEndian.AppendUint32(out, uint32(len(b)))
+	for {
+		n := min(len(b), maxBlock)
+		last := uint32(0)
+		if n == len(b) {
+			last = 1
+		}
+		hdr := uint32(n)<<3 | 0<<1 | last // block type 0: raw
+		out = append(out, byte(hdr), byte(hdr>>8), byte(hdr>>16))
+		out = append(out, b[:n]...)
+		b = b[n:]
+		if last == 1 {
+			return out
+		}
+	}
+}
+
+// bitWriter packs bits least-significant first, as deflate requires.
+type bitWriter struct {
+	out []byte
+	acc uint64
+	n   uint
+}
+
+func (w *bitWriter) bits(v uint64, n uint) {
+	w.acc |= v << w.n
+	w.n += n
+	for w.n >= 8 {
+		w.out = append(w.out, byte(w.acc))
+		w.acc >>= 8
+		w.n -= 8
+	}
+}
+
+// code writes an n-bit Huffman code, most-significant bit first (RFC 1951
+// §3.1.1).
+func (w *bitWriter) code(c uint64, n uint) {
+	var r uint64
+	for i := uint(0); i < n; i++ {
+		r = r<<1 | (c>>i)&1
+	}
+	w.bits(r, n)
+}
+
+func (w *bitWriter) flush() []byte {
+	if w.n > 0 {
+		w.out = append(w.out, byte(w.acc))
+		w.acc, w.n = 0, 0
+	}
+	return w.out
+}
+
+// deflateZeroRun returns one final fixed-Huffman deflate block (RFC 1951
+// §3.2.6) that inflates to 1+258*matches zero bytes: a literal 0 followed by
+// matches copies of <length 258, distance 1>, then end-of-block. Each match
+// costs 13 bits, so the ratio is about 159:1.
+func deflateZeroRun(matches int) (stream []byte, inflated uint64) {
+	var w bitWriter
+	w.bits(1, 1)      // BFINAL
+	w.bits(1, 2)      // BTYPE 01: fixed Huffman codes
+	w.code(0x30+0, 8) // literal 0 (literals 0-143: 8-bit codes from 0x30)
+	for i := 0; i < matches; i++ {
+		w.code(0xc0+5, 8) // symbol 285 = length 258, no extra bits (280-287: 8-bit codes from 0xc0)
+		w.code(0, 5)      // distance code 0 = distance 1, no extra bits
+	}
+	w.code(0, 7) // symbol 256, end of block (256-279: 7-bit codes from 0)
+	return w.flush(), 1 + 258*uint64(matches)
+}
+
+// gzipZeroBomb wraps deflateZeroRun in a gzip member with the correct CRC-32
+// and ISIZE of the inflated zeros.
+func gzipZeroBomb(matches int) (member []byte, inflated uint64) {
+	stream, n := deflateZeroRun(matches)
+	zeros := make([]byte, 4096)
+	crc := uint32(0)
+	for left := n; left > 0; {
+		k := min(left, uint64(len(zeros)))
+		crc = crc32.Update(crc, crc32.IEEETable, zeros[:k])
+		left -= k
+	}
+	out := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff}
+	out = append(out, stream...)
+	out = binary.LittleEndian.AppendUint32(out, crc)
+	return binary.LittleEndian.AppendUint32(out, uint32(n)), n
+}
+
+// uvarint returns the protobuf-style varint encoding of v.
+func uvarint(v uint64) []byte {
+	var b []byte
+	for v >= 0x80 {
+		b = append(b, byte(v)|0x80)
+		v >>= 7
+	}
+	return append(b, byte(v))
+}
