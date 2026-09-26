@@ -7,6 +7,12 @@
 //
 // Reader contract: the command prints the stored tile bytes to stdout and
 // exits 0; exit 0 with no output means absent; a non-zero exit is an error.
+// On a non-zero exit the row's error keeps the first line of stderr and of
+// stdout (some readers, go-pmtiles among them, log errors to stdout), each
+// clipped; on exit 0, stdout is the tile and is only hashed. Rows contain
+// the reader's text verbatim, including any timestamps or URLs with the port.
+// The "timeout after N ms" error is this harness killing the process, not a
+// timeout of the reader itself.
 // Each tile is a separate process, so the reader re-reads the header and
 // directories for every tile. A run stops at the first error, as the
 // pmtiles.js harness does.
@@ -33,6 +39,8 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const archives = manifest.archives.filter((a) => a.kind === "valid" && (!only || a.name === only));
 const scenarios = await (await fetch(`${base}/__lab/scenarios`)).json();
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
+
+const firstLine = (s) => (s.trim().split("\n")[0] || "").trim().slice(0, 200);
 
 // runTile resolves to {bytes} or {error}.
 function runTile(url, t) {
@@ -69,7 +77,14 @@ function runTile(url, t) {
     p.on("error", (e) => finish({ error: String(e) }));
     p.on("close", (code) => {
       if (code === 0) finish({ bytes: Buffer.concat(out) });
-      else finish({ error: `exit ${code}: ${err.trim().split("\n")[0] || ""}` });
+      else {
+        const parts = [`exit ${code}`];
+        const e = firstLine(err);
+        const o = firstLine(Buffer.concat(out).subarray(0, 4096).toString("utf8"));
+        if (e) parts.push(`stderr: ${e}`);
+        if (o) parts.push(`stdout: ${o}`);
+        finish({ error: parts.join("; ") });
+      }
     });
   });
 }
@@ -82,7 +97,7 @@ for (const sc of scenarios) {
     for (const t of a.tiles) {
       const r = await runTile(url, t);
       if (r.error) {
-        row.error = r.error.slice(0, 160);
+        row.error = r.error.slice(0, 480);
         break;
       }
       const got = r.bytes.length ? sha256(r.bytes) : null;
