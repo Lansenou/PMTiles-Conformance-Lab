@@ -216,9 +216,18 @@ func (s *Server) serveArchive(w http.ResponseWriter, r *http.Request) {
 	te := TraceEntry{Seq: seq, Scenario: clip(sc.Name), Method: clip(req.Method), Path: clip(req.Path),
 		Range: clip(req.Range), IfMatch: clip(req.IfMatch), IfNoneMatch: clip(req.IfNoneMatch),
 		IfRange: clip(req.IfRange), Origin: clip(req.Origin)}
-	// Deferred so that the entry is also recorded when write aborts with
-	// http.ErrAbortHandler.
-	defer func() { s.trace.add(gen, te) }()
+	// The entry is recorded by write (commit) just before the response can
+	// end, and finalized here; deferred so that it is also recorded when
+	// write aborts with http.ErrAbortHandler.
+	committed := false
+	commit := func() { s.trace.add(gen, te); committed = true }
+	defer func() {
+		if committed {
+			s.trace.update(gen, te)
+		} else {
+			s.trace.add(gen, te)
+		}
+	}()
 
 	x := &Exchange{Req: req, File: f, Delay: s.delay}
 	if f == nil {
@@ -246,7 +255,7 @@ func (s *Server) serveArchive(w http.ResponseWriter, r *http.Request) {
 	if bodyAllowed(resp.Status) { // net/http drops Content-Length otherwise
 		te.ContentLength = resp.Header.Get("Content-Length")
 	}
-	s.write(w, r, resp, &te)
+	s.write(w, r, resp, &te, commit)
 }
 
 // bodyAllowed mirrors net/http: 1xx, 204 and 304 responses carry no body
@@ -255,10 +264,14 @@ func bodyAllowed(status int) bool {
 	return (status < 100 || status > 199) && status != http.StatusNoContent && status != http.StatusNotModified
 }
 
-// write sends resp, applying delay/cut/stall, and records what was sent.
-// Aborts use http.ErrAbortHandler, which closes the connection without a
-// log; no other panic is raised here.
-func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, te *TraceEntry) {
+// write sends resp, applying delay/cut/stall, and records what was sent in
+// te. For a response that runs to completion, commit is called with te
+// already describing the complete response before its last body byte (or,
+// without a body, its headers) is flushed, so a client that has seen the
+// whole response always finds its trace entry; a later failure is fixed up
+// by the caller. Aborts use http.ErrAbortHandler, which closes the
+// connection without a log, after te is final; no other panic is raised.
+func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, te *TraceEntry, commit func()) {
 	ctx := r.Context()
 	if resp.Delay > 0 {
 		t := time.NewTimer(min(resp.Delay, MaxDelay))
@@ -297,12 +310,19 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 		}
 		return true
 	}
-	defer func() {
-		if te.BytesSent > 0 {
-			h := sha256.Sum256(body[:te.BytesSent])
+	hashed := 0 // te.BodySHA256 describes body[:hashed]
+	hash := func() {
+		if te.BytesSent == hashed {
+			return
+		}
+		hashed = te.BytesSent
+		te.BodySHA256 = ""
+		if hashed > 0 {
+			h := sha256.Sum256(body[:hashed])
 			te.BodySHA256 = hex.EncodeToString(h[:])
 		}
-	}()
+	}
+	defer hash()
 	switch {
 	case resp.CutAfter >= 0 && resp.CutAfter < len(body):
 		if send(body[:resp.CutAfter]) && flushed() {
@@ -323,7 +343,18 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, resp *Response, t
 		}
 		panic(http.ErrAbortHandler)
 	}
-	if send(body) && flushed() {
+	last := max(len(body)-1, 0)
+	if !send(body[:last]) {
+		return
+	}
+	rest := len(body) - last
+	te.BytesSent += rest // provisional: as if the rest is delivered
+	te.Complete = true
+	hash()
+	commit()
+	te.BytesSent -= rest
+	te.Complete = false
+	if send(body[last:]) && flushed() {
 		te.Complete = true
 	}
 }

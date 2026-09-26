@@ -456,11 +456,44 @@ func TestWriteErrorTraced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest("GET", "/"+testPath, nil)
-	s.ServeHTTP(&failWriter{ResponseRecorder: httptest.NewRecorder(), limit: 300}, req)
-	e := s.Trace().Entries[0]
-	if e.Status != 200 || e.BytesSent != 300 || e.BodySHA256 != sum(data[:300]) || e.Complete || e.Error != TraceWriteError {
-		t.Fatalf("%+v", e)
+	// Failure before the entry is committed, and on the very last byte
+	// after it was committed optimistically.
+	for _, limit := range []int{300, 999} {
+		s.Reset()
+		req := httptest.NewRequest("GET", "/"+testPath, nil)
+		s.ServeHTTP(&failWriter{ResponseRecorder: httptest.NewRecorder(), limit: limit}, req)
+		e := s.Trace().Entries[0]
+		if e.Status != 200 || e.BytesSent != limit || e.BodySHA256 != sum(data[:limit]) || e.Complete || e.Error != TraceWriteError {
+			t.Fatalf("limit %d: %+v", limit, e)
+		}
+	}
+}
+
+// A client that has read a whole response finds its trace entry without
+// waiting: the entry is recorded before the last byte is flushed.
+func TestTraceRecordedBeforeResponseEnds(t *testing.T) {
+	big := NewFile("big", pattern(200<<10))
+	fx := newFixture(t, Config{Files: []*File{big, NewFile("small", pattern(10))}, Scenarios: []Scenario{{Name: "normal"}}, Default: "normal"})
+	for i := 0; i < 30; i++ {
+		fx.srv.Reset()
+		var reqs []string
+		for _, c := range []struct{ m, p, rng string }{
+			{"GET", "big", ""}, {"GET", "big", "bytes=-70000"}, {"HEAD", "big", ""}, {"GET", "small", ""},
+			{"GET", "small", "bytes=50-"}, {"OPTIONS", "small", ""}, {"GET", "none", ""},
+		} {
+			r := do(t, fx.client, c.m, fx.ts.URL+"/"+c.p, hdr("Range", c.rng))
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			reqs = append(reqs, c.p)
+			tr := fx.srv.Trace()
+			if len(tr.Entries) != len(reqs) {
+				t.Fatalf("iteration %d, request %d: %d entries", i, len(reqs), len(tr.Entries))
+			}
+			if e := tr.Entries[len(reqs)-1]; e.BytesSent != len(r.body) || e.BodySHA256 != sum(r.body) || !e.Complete {
+				t.Fatalf("iteration %d: %+v", i, e)
+			}
+		}
 	}
 }
 

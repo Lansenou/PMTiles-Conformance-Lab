@@ -105,6 +105,22 @@ func (t *traceBuf) add(gen int, e TraceEntry) {
 	t.dropped++
 }
 
+// update replaces the recorded entry with e's sequence number, if it is
+// still held and belongs to the current generation.
+func (t *traceBuf) update(gen int, e TraceEntry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if gen != t.gen {
+		return
+	}
+	for i := range t.entries {
+		if t.entries[i].Seq == e.Seq {
+			t.entries[i] = e
+			return
+		}
+	}
+}
+
 func (t *traceBuf) snapshot() Trace {
 	t.mu.Lock()
 	defer t.mu.Unlock()
