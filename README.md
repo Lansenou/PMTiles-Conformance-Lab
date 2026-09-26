@@ -9,18 +9,18 @@
 
 The lab is a development and CI tool. It is not a tile server, map renderer, tile downloader or general PMTiles SDK. It uses no real map data and needs no network at test time.
 
-Status: v0.2.0, pre-release. See [Limits and known gaps](#limits-and-known-gaps).
+Status: v0.2.0 release candidate, not yet tagged. See [Limits and known gaps](#supported-unsupported-and-known-gaps).
 
 ## Why
 
 Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
-Findings from running three independent readers through every scenario (2026-09-26; details in [docs/scenarios.md](docs/scenarios.md#three-readers-compared)):
+Observations from running three independent readers through every scenario on 2026-09-26: pmtiles npm 4.5.0 (`FetchSource`), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
 
-* pmtiles.js 4.5.0 and the go-pmtiles 1.31.2 `tile` command return wrong tile bytes without an error under `short-range`, `overlong-body` and `expanded-range`. `short-range` is fully conforming server behaviour (RFC 9110 §15.3.7).
-* go-pmtiles 1.31.2 `tile` panics when a server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2) on a gzip archive.
-* pmtiles-rs 0.24.0 rejects every framing fault. It also rejects a conforming short 206 instead of requesting the rest.
-* None of the three validates `Content-Range`. Details: [docs/scenarios.md](docs/scenarios.md).
+* **Silent wrong bytes.** pmtiles.js and go-pmtiles `tile` returned wrong tile bytes without an error under `short-range`, `expanded-range` and `overlong-body`. The first two are valid server responses (RFC 9110 §15.3.7, §14.2), and a client MUST inspect `Content-Range` on a 206.
+* **go-pmtiles crash.** go-pmtiles 1.31.2 `tile` exits with a nil-pointer panic on a gzip archive when the server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2). A `go-pmtiles serve` process backed by such a server crashed the same way. Raw evidence: [docs/results/go-pmtiles-1.31.2-ignore-range.txt](docs/results/go-pmtiles-1.31.2-ignore-range.txt).
+* **pmtiles-rs strictness.** pmtiles-rs 0.24.0 requires a 206 whose body is exactly the requested length. It therefore rejects 200 responses, over-long bodies and the conforming short 206, and does not request the remainder.
+* **Content-Range.** All three accepted a 206 whose `Content-Range` was shifted by one byte while the body was correct. Their sources show that none of them reads `Content-Range` on a 206.
 
 ## Quick start
 
@@ -93,7 +93,7 @@ The server's view of the same request (`curl http://127.0.0.1:8080/__lab/trace`)
 Ready-made harnesses:
 
 * [examples/pmtiles-js/run-scenarios.mjs](examples/pmtiles-js/run-scenarios.mjs) runs the `pmtiles` npm package against every scenario and fixture and prints one JSON row each.
-* [examples/cli-readers/run-scenarios.mjs](examples/cli-readers/run-scenarios.mjs) does the same for any command-line reader that prints one tile's bytes: `--cmd 'go-pmtiles tile {url} {z} {x} {y}'`, or the Rust wrapper in [examples/pmtiles-rs](examples/pmtiles-rs) (`cargo build --release`).
+* [examples/cli-readers/run-scenarios.mjs](examples/cli-readers/run-scenarios.mjs) does the same for any command-line reader that prints one tile's bytes: `--cmd 'go-pmtiles tile {url} {z} {x} {y}'`, or the Rust wrapper in [examples/pmtiles-rs](examples/pmtiles-rs) (`cd examples/pmtiles-rs && cargo build --release --locked`; `target/` is ignored). Versions and exact commands for the committed results: [docs/results/README.md](docs/results/README.md).
 * [examples/pmtiles-js/browser-cors.mjs](examples/pmtiles-js/browser-cors.mjs) checks CORS in headless Chromium from a second origin.
 
 ```sh
@@ -142,7 +142,7 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 | `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | valid HTTP; browsers block reads |
 | `cors-no-expose` | no `Access-Control-Expose-Headers` | valid; browsers hide `ETag` and `Content-Range` |
 
-Full table with sources, the probe's verdicts, pmtiles.js observations and Chromium results: [docs/scenarios.md](docs/scenarios.md).
+Full table with sources, lab recommendations, the probe's results, three third-party readers and Chromium results: [docs/scenarios.md](docs/scenarios.md).
 
 ## Fixtures
 
@@ -173,6 +173,8 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 * **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS.
 * **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
+* **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). macOS is not tested. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.
+* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs.
 * **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It is not a production client.
 
 ## Development
@@ -182,6 +184,15 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 ```
 
 It runs `gofmt`, `go vet`, `go test ./...`, `go test -race ./...`, regenerates the corpus and diffs it with `fixtures/`, checks `SHA256SUMS`, and runs 10 s smoke runs of each fuzzer. Tests bind only `127.0.0.1` ephemeral ports and use no network or secrets.
+
+**Windows.** Use a normal Git for Windows clone (the default `core.autocrlf=true` is fine: `.gitattributes` checks every text file out with LF and leaves the fixture corpus untouched) and run the same script from Git Bash:
+
+```sh
+./scripts/check.sh               # with cgo and a C compiler (race detector runs)
+SKIP_RACE=1 ./scripts/check.sh   # Go without a C compiler: every gate except -race
+```
+
+Without a C compiler `go test -race` cannot run; the script stops with a hint rather than skipping silently. CI runs this script on `ubuntu-latest` (all gates, including `-race`) and on `windows-latest` from a default autocrlf checkout with `SKIP_RACE=1`. In PowerShell or cmd, build the CLI as `go build -o pmtiles-lab.exe ./cmd/pmtiles-lab`; the quick start above otherwise applies unchanged. macOS is not tested in CI.
 
 Manual checks that need registries, not run in CI:
 

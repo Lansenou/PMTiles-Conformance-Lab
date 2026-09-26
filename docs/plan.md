@@ -155,7 +155,7 @@ Each fault changes one behaviour relative to `normal`. "HTTP validity" says whet
 
 ## 12. CI
 
-One workflow, one `ubuntu-latest` job, `timeout-minutes: 15`, `permissions: contents: read`, `concurrency` cancelling superseded runs per ref, actions pinned by full commit SHA, triggers `pull_request` and `push` to `main`. It runs `scripts/check.sh`, the same script documented for local development: `gofmt -l`, `go vet`, `go test ./...`, `go test -race ./...`, regenerate fixtures and compare with the committed corpus, bounded fuzz smoke. Tests bind only `127.0.0.1:0`, need no secrets, and do not contact external services. The npm/Playwright oracle in `examples/` needs registries, so it is a documented manual check, not part of CI. No deployment or publishing. A manually approved release workflow is proposed in the README only after the CLI is stable.
+One workflow with an `ubuntu-latest` job (`timeout-minutes: 15`) and a `windows-latest` job that runs the same script from a default autocrlf checkout without `-race` (no C compiler assumed), `permissions: contents: read`, `concurrency` cancelling superseded runs per ref, actions pinned by full commit SHA, triggers `pull_request` and `push` to `main`. It runs `scripts/check.sh`, the same script documented for local development: `gofmt -l`, `go vet`, `go test ./...`, `go test -race ./...`, regenerate fixtures and compare with the committed corpus, bounded fuzz smoke. Tests bind only `127.0.0.1:0`, need no secrets, and do not contact external services. The npm/Playwright oracle in `examples/` needs registries, so it is a documented manual check, not part of CI. No deployment or publishing. A manually approved release workflow is proposed in the README only after the CLI is stable.
 
 ## 13. Bounded risks
 

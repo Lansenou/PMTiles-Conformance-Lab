@@ -26,3 +26,34 @@ jobs:
           cache: false
       - run: go version
       - run: ./scripts/check.sh
+
+  # A Windows checkout with core.autocrlf=true (the Git for Windows default)
+  # running the documented local path in Git Bash. The race step is skipped
+  # here only; the Linux job above runs it.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set core.autocrlf=true before checkout
+        run: |
+          git config --global core.autocrlf true
+          test "$(git config --get core.autocrlf)" = true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Assert the autocrlf checkout left text files with LF
+        run: |
+          test "$(git config --get core.autocrlf)" = true
+          if git ls-files -z --eol | tr '\0' '\n' | grep -E '^i/lf +w/crlf'; then
+            echo "working-tree files converted to CRLF"; exit 1
+          fi
+          git ls-files --eol cmd/pmtiles-lab/main.go scripts/check.sh fixtures/SHA256SUMS
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go version
+      - run: SKIP_RACE=1 ./scripts/check.sh

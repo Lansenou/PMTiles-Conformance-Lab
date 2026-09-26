@@ -2,77 +2,116 @@
 
 A scenario is selected per request with `/scenarios/<name>/<file>`, or for plain `/<file>` URLs with `serve --scenario NAME`. Names are stable. Each fault changes one behaviour of `normal`; the "one change at a time" test in `internal/scenarios` compares every fault with `normal` for the same request.
 
-## Where each statement comes from
+## Three kinds of statement
 
-* **Requirement** means text in RFC 9110 or the Fetch standard.
-* **Lab choice** means behaviour the lab picked where the standards allow several.
-* **Deliberately invalid** means the server response itself breaks a requirement, so that client handling can be observed.
+This page keeps three things apart:
 
-A 200 answer to a Range request is not treated as invalid in itself. RFC 9110 §14.2 lets a server ignore Range. What is tested is whether the client uses the bytes correctly.
+1. **HTTP validity:** whether the *server's* response conforms to RFC 9110, RFC 9112 or the Fetch standard, with the section cited. "Deliberately invalid" means the lab breaks a requirement on purpose, so client handling can be observed.
+2. **Lab recommendation:** what the lab suggests a robust client do. Where a standard requires it, the section is cited. Otherwise it is the lab's opinion, and a client that does something else is not non-conforming for that reason alone.
+3. **Observed outcome:** what a specific client version did, through a specific entry point, on 2026-09-26. Observations carry no verdict. The [standards-based assessment](#standards-based-assessment) below says which observations conflict with a requirement.
 
-## Table
+A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a server ignore Range. What is tested is whether the client uses the bytes correctly.
 
-"Probe" is the lab's reference client (`pmtiles-lab probe`) against `valid/root-none.pmtiles`. Its verdicts for all three valid fixtures are pinned in `internal/probe/scenarios_test.go`. "pmtiles.js 4.5.0" is the third-party npm client, observed with `examples/pmtiles-js/run-scenarios.mjs` on 2026-09-26 against all three valid fixtures. Raw rows are in [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl).
+## Scenarios: HTTP validity and lab recommendation
 
-| Scenario | Change (applies to) | Server response vs standards | Robust client should | Probe | pmtiles.js 4.5.0 |
-|---|---|---|---|---|---|
-| `normal` | none | conforming (RFC 9110 §14, §15.3.7, §15.5.17) | read tiles | pass, 9 requests | all tiles correct |
-| `wrong-content-range` | `Content-Range` start/end +1, body correct (206) | deliberately invalid: `Content-Range` must describe the enclosed bytes (§14.4) | reject | fail `content_range_mismatch` at request 1 | accepted; tiles correct because it ignores `Content-Range` |
-| `status-200-partial-body` | 200 with only the requested bytes, no `Content-Range` (206) | deliberately invalid: a 200 body is the whole representation (§15.3.1) | notice the size contradiction | fail `length_mismatch` at request 2 | accepted; tiles correct (it deliberately tolerates short 200s) |
-| `truncated-body` | connection closed after half the body (206) | deliberately invalid message framing (RFC 9112 §6.3) | error, not short data | fail `truncated_body` at request 1 | error `TypeError: terminated` |
-| `overlong-body` | 16 extra body bytes, `Content-Range` unchanged (206) | deliberately invalid: body longer than `Content-Range` span | reject | fail `length_mismatch` at request 1 | **wrong tile bytes returned without error** (root-none, root-gzip: 8 of 11); leaf directory decode error on leaves-gzip |
-| `expanded-range` | 16 more bytes than requested, accurate `Content-Range` (206) | valid but unusual: §14.2 says the 206 SHOULD correspond to the requested range, and the client MUST inspect `Content-Range` (§15.3.7: "A client MUST inspect a 206 response's Content-Type and Content-Range field(s)") | use `Content-Range` or reject | pass with 8 warnings (uses the covered bytes) | **wrong tile bytes returned without error** (8 of 11); leaf directory decode error on leaves-gzip |
-| `short-range` | 206 omitting the last byte of the requested range, accurate `Content-Range` | conforming: "a server might want to send only a subset of the data requested" (§15.3.7) | request the remaining bytes | pass, 18 requests (fetches each remainder) | **tiles one byte short, returned without error** (root-none, root-gzip: 8 of 11); leaf directory decode error on leaves-gzip |
-| `ignore-range` | full 200 for Range requests | conforming (§14.2 permits ignoring Range) | slice the full body, or fail explicitly | pass with 9 warnings | explicit error: "Check that your storage backend supports HTTP Byte Serving" |
-| `always-416` | 416 `bytes */SIZE` for every Range request | deliberately invalid for satisfiable ranges (§15.5.17) | stop with a clear error | fail `unexpected_status` at request 1 | error, but the message says "non-matching ETag" |
-| `etag-change` | ETag differs after the first GET/HEAD; bytes unchanged | each response conforms; the validator is inconsistent across requests | detect, then refetch or fail | fail `etag_changed` at request 2 (strict policy) | detects, refetches, all tiles correct (2 extra requests) |
-| `slow-headers` | headers delayed by `--delay` | conforming | honour its own timeout | fail `timeout` at request 1 (100 ms timeout in test) | harness timeout (1 s) fired; the library itself has no header timeout |
-| `stall-body` | half the body, then stall, then close | deliberately invalid framing after the stall | cancel or time out; no hang | fail `timeout` at request 1 | harness timeout (1 s) fired |
-| `cors-missing` | no `Access-Control-*` headers | conforming HTTP; blocks browser reads (Fetch "CORS check") | n/a outside browsers | pass (not a browser) | pass (Node is not a browser) |
-| `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | conforming HTTP; blocks browser reads | n/a outside browsers | pass | pass |
-| `cors-no-expose` | no `Access-Control-Expose-Headers` | conforming; `ETag` and `Content-Range` are not CORS-safelisted response headers (Fetch) | n/a outside browsers; in browsers, cope with hidden headers | pass | pass |
+| Scenario | Change (applies to) | HTTP validity of the server response | Lab recommendation for a client |
+|---|---|---|---|
+| `normal` | none | conforming (RFC 9110 §14, §15.3.7, §15.5.17) | read tiles |
+| `wrong-content-range` | `Content-Range` start/end +1, body correct (206) | deliberately invalid: `Content-Range` must describe the enclosed bytes (§14.4) | reject; §15.3.7 requires a client to inspect `Content-Range` |
+| `status-200-partial-body` | 200 with only the requested bytes, no `Content-Range` (206) | deliberately invalid: a 200 body is the whole representation (§15.3.1) | notice the size contradiction |
+| `truncated-body` | connection closed after half the body (206) | deliberately invalid message framing (RFC 9112 §6.3) | report an error, not short data (RFC 9112 §8: an incomplete message) |
+| `overlong-body` | 16 extra body bytes, `Content-Range` unchanged (206) | deliberately invalid: body longer than the `Content-Range` span | reject, or use only the span `Content-Range` describes |
+| `expanded-range` | 16 more bytes than requested, accurate `Content-Range` (206) | valid but unusual: §14.2 says the 206 SHOULD correspond to the requested range | use `Content-Range` (§15.3.7: "A client MUST inspect a 206 response's Content-Type and Content-Range field(s)") or reject |
+| `short-range` | 206 omitting the last byte of the requested range, accurate `Content-Range` | conforming: "a server might want to send only a subset of the data requested" (§15.3.7) | request the remaining bytes (lab recommendation); never use the short body as the whole range (§15.3.7) |
+| `ignore-range` | full 200 for Range requests | conforming (§14.2 permits ignoring Range) | slice the full body, or fail explicitly; never treat the 200 body as the requested range (§15.3.1) |
+| `always-416` | 416 `bytes */SIZE` for every Range request | deliberately invalid for satisfiable ranges (§15.5.17) | stop with a clear error |
+| `etag-change` | ETag differs after the first GET/HEAD; bytes unchanged | each response conforms; the validator is inconsistent across requests | detect, then refetch or fail (lab recommendation; `If-Match`/`If-Range`, §13.1, are the standard tools) |
+| `slow-headers` | headers delayed by `--delay` | conforming | have a timeout of its own (lab recommendation) |
+| `stall-body` | half the body, then a stall until `--delay`, then close | deliberately invalid framing after the stall | cancel or time out; no hang (lab recommendation) |
+| `cors-missing` | no `Access-Control-*` headers | conforming HTTP; blocks browser reads (Fetch "CORS check") | n/a outside browsers |
+| `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | conforming HTTP; blocks browser reads | n/a outside browsers |
+| `cors-no-expose` | no `Access-Control-Expose-Headers` | conforming; `ETag` and `Content-Range` are not CORS-safelisted response headers (Fetch) | n/a outside browsers; in browsers, cope with hidden headers |
 
-The bold rows are the most important observations: a client that ignores `Content-Range` and `Content-Length` returns wrong bytes silently. `short-range` is fully conforming server behaviour, and `expanded-range` is valid but unusual, so a reader cannot blame the server for either.
+## Observed: the lab probe
 
-## Three readers compared
+`pmtiles-lab probe` is the lab's reference client with a strict policy. Its results for all three valid fixtures are pinned in `internal/probe/scenarios_test.go`; below is `valid/root-none.pmtiles`.
 
-The same 15 scenarios × 3 valid fixtures, run on 2026-09-26 against three independent PMTiles readers. Raw rows:
-- [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl): `examples/pmtiles-js/run-scenarios.mjs`, one `PMTiles` instance per run.
-- [results/go-pmtiles-1.31.2.jsonl](results/go-pmtiles-1.31.2.jsonl): `examples/cli-readers/run-scenarios.mjs` with `go-pmtiles tile URL Z X Y`, one process per tile.
-- [results/pmtiles-rs-0.24.0.jsonl](results/pmtiles-rs-0.24.0.jsonl): the same harness with `examples/pmtiles-rs`, a 40-line wrapper around the `pmtiles` crate's `HttpBackend`, one process per tile.
+| Scenario | Probe |
+|---|---|
+| `normal` | pass, 9 requests |
+| `wrong-content-range` | fail `content_range_mismatch` at request 1 |
+| `status-200-partial-body` | fail `length_mismatch` at request 2 |
+| `truncated-body` | fail `truncated_body` at request 1 |
+| `overlong-body` | fail `length_mismatch` at request 1 |
+| `expanded-range` | pass with 8 warnings (uses the covered bytes) |
+| `short-range` | pass, 18 requests (fetches each remainder) |
+| `ignore-range` | pass with 9 warnings (slices the full body) |
+| `always-416` | fail `unexpected_status` at request 1 |
+| `etag-change` | fail `etag_changed` at request 2 (strict policy) |
+| `slow-headers` | fail `timeout` at request 1 (probe default 5 s; the test uses a 0.5 s request timeout against a 10 s server delay) |
+| `stall-body` | fail `timeout` at request 1 (same timeouts) |
+| `cors-*` (3) | pass (not a browser) |
 
-A cell with one value means all three fixtures gave the same result. Otherwise it lists root-none / root-gzip / leaves-gzip. WRONG n/m means n of m manifest expectations got wrong bytes (or "absent" for a present tile) **without any error**. Harness timeouts are 1 s against a 2 s server delay.
+## Observed: three third-party readers
 
-| Scenario | Server response | pmtiles.js 4.5.0 | go-pmtiles 1.31.2 (`tile`) | pmtiles-rs 0.24.0 |
-|---|---|---|---|---|
-| `normal` | conforming | ok | ok | ok |
-| `wrong-content-range` | invalid | ok (ignores `Content-Range`) | ok (ignores `Content-Range`) | ok (ignores `Content-Range`) |
-| `status-200-partial-body` | invalid | ok | ok | error: "Range requests unsupported" |
-| `truncated-body` | invalid framing | error | error (exit 1, no message) | error |
-| `overlong-body` | invalid | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: body longer than requested |
-| `expanded-range` | valid but unusual | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: body longer than requested |
-| `short-range` | conforming | **WRONG 8/11** / **WRONG 8/11** / error | **WRONG 8/11** / **WRONG 8/11** / **WRONG 24/32** | error: fewer bytes than requested (does not fetch the rest) |
-| `ignore-range` | conforming | error (explicit "Byte Serving" message) | **WRONG 8/11** / **panic** / **panic** | error: "Range requests unsupported" |
-| `always-416` | invalid | error (misleading ETag message) | error (exit 1, no message) | error |
-| `etag-change` | inconsistent validator | ok (detects, refetches) | ok bytes, change not detected | error: "Underlying data source was modified" |
-| `slow-headers` | conforming | harness timeout | harness timeout | harness timeout |
-| `stall-body` | invalid framing | harness timeout | harness timeout | harness timeout |
-| `cors-*` (3) | browser-only effect | ok | ok | ok |
+The same 15 scenarios × 3 valid fixtures were run on 2026-09-26 against three independent PMTiles readers, each through one entry point:
 
-What this shows:
+* **pmtiles npm 4.5.0:** `examples/pmtiles-js/run-scenarios.mjs`, one `PMTiles` instance (`FetchSource`) per run.
+* **go-pmtiles 1.31.2:** the `go-pmtiles tile URL Z X Y` CLI command via `examples/cli-readers/run-scenarios.mjs`, one process per tile.
+* **pmtiles-rs 0.24.0:** the `pmtiles` crate's `HttpBackend` and `AsyncPmTilesReader` via [examples/pmtiles-rs](../examples/pmtiles-rs) (a 32-line wrapper) and the same harness, one process per tile.
 
-* **Silent wrong bytes are common.**
-  * Both pmtiles.js and go-pmtiles return tiles of the wrong length or content, with no error, when a 206 body does not match the requested range.
-  * This includes `short-range`, which RFC 9110 §15.3.7 explicitly permits ("a server might want to send only a subset of the data requested").
-  * pmtiles-rs checks body length against the request and fails instead. It does not request the remainder of a short 206 either, so it errors on a conforming server.
-* **go-pmtiles `tile` panics under `ignore-range`.** With a gzip archive and a server that ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2), it crashes: `panic: runtime error: invalid memory address or nil pointer dereference` in `compress/gzip.(*Reader).Read`. On the uncompressed fixture it reports present tiles as absent.
-* **ETag handling differs.**
-  * pmtiles.js detects the change and refetches.
-  * pmtiles-rs refuses to continue.
-  * go-pmtiles `tile` mixes responses with different ETags without noticing. In this scenario the bytes are unchanged, so the output is right, but a real file change would not be detected.
-* **Nobody checks `Content-Range`.** No reader validates it; in `wrong-content-range` all three succeed only because the bytes are correct.
+Raw rows, versions, build and run commands: [results/README.md](results/README.md).
 
-These are observations of specific versions through specific entry points (the go-pmtiles CLI `tile` command, a minimal pmtiles-rs wrapper). They are not claims about other versions or other APIs of the same projects.
+A cell with one value means all three fixtures gave the same result. Otherwise it lists root-none / root-gzip / leaves-gzip. "Wrong n/m" means n of m manifest expectations got wrong bytes, or "absent" for a present tile, *with no error*. "Harness timeout" means the harness killed the reader after 1 s against a 2 s server delay. That is not a timeout of the reader itself; what the readers do without it is in the notes below the table.
+
+| Scenario | pmtiles npm 4.5.0 | go-pmtiles 1.31.2 (`tile`) | pmtiles-rs 0.24.0 |
+|---|---|---|---|
+| `normal` | ok | ok | ok |
+| `wrong-content-range` | ok (tiles correct) | ok (tiles correct) | ok (tiles correct) |
+| `status-200-partial-body` | ok | ok | error: "Range requests unsupported" |
+| `truncated-body` | error: "TypeError: terminated" | error: "unexpected EOF" | error: "error decoding response body" |
+| `overlong-body` | **wrong 8/11** / **wrong 8/11** / error (`TypeError`, no message) | **wrong 8/11** / **wrong 8/11** / **wrong 24/32** | error: "HTTP response body is too long" |
+| `expanded-range` | **wrong 8/11** / **wrong 8/11** / error (`TypeError`, no message) | **wrong 8/11** / **wrong 8/11** / **wrong 24/32** | error: "HTTP response body is too long" |
+| `short-range` | **wrong 8/11** / **wrong 8/11** / error (`TypeError`, no message) | **wrong 8/11** / **wrong 8/11** / **wrong 24/32** | error: "Unexpected number of bytes returned" (no request for the remainder) |
+| `ignore-range` | error: "... Check that your storage backend supports HTTP Byte Serving." | **wrong 8/11** (present tiles reported absent) / **crash** / **crash** (exit 2, nil-pointer panic) | error: "Range requests unsupported" |
+| `always-416` | error: "Server returned non-matching ETag ..." | error: "HTTP error indicates file has changed: 416" | error: "HTTP status client error (416 ...)" |
+| `etag-change` | ok (refetched; 2 extra requests) | ok (tiles correct; no error for the changed ETag) | error: "Underlying data source was modified" |
+| `slow-headers` | harness timeout | harness timeout | harness timeout |
+| `stall-body` | harness timeout | harness timeout | harness timeout |
+| `cors-*` (3) | ok | ok | ok |
+
+Notes on the observations:
+
+* **go-pmtiles `ignore-range` crash.** For a gzip archive, `go-pmtiles tile` exits 2 with `panic: runtime error: invalid memory address or nil pointer dereference` in `compress/gzip.(*Reader).Read`, called from `pmtiles.DeserializeEntries` (`directory.go:337`).
+  * On root-none it decodes the whole file as a directory and reports present tiles as absent.
+  * Source reading: `HTTPBucket` (`bucket.go:195-205`) accepts the 200 and returns the whole body as if it were the requested range, and `directory.go:331` ignores the `gzip.NewReader` error.
+  * The same crash takes down a `go-pmtiles serve` process backed by the lab URL (`server.go:195`). It was reproduced with one tile request against root-gzip and is recorded as an observation of that command only.
+  * Raw commands, exit codes, output and traces: [results/go-pmtiles-1.31.2-ignore-range.txt](results/go-pmtiles-1.31.2-ignore-range.txt).
+* **Error messages.** go-pmtiles prints its errors to stdout, prefixed with a log timestamp. pmtiles.js reports `always-416` as an ETag mismatch, and go-pmtiles reports it as "file has changed". Neither message names the 416.
+* **Without the harness timeout** ([results/timing-without-harness-timeout.txt](results/timing-without-harness-timeout.txt), tile 0/0/0 of root-none):
+  * `slow-headers`: go-pmtiles returned the correct tile after 6.0 s (three delayed requests), and pmtiles-rs after 4.0 s (two). Neither timed out on its own. go-pmtiles uses `http.DefaultClient`, which has no timeout, and the wrapper uses `reqwest::Client::new()`, which has none by default.
+  * `stall-body`: both exited 1 after 2.0 s, when the lab closed the stalled connection. The error came from the server's close, not from a reader timeout.
+  * pmtiles.js `FetchSource` passes no timeout signal of its own. This is from its source; it was not run without the harness timeout.
+* **Content-Range.**
+  * *Observed:* all three accepted the `wrong-content-range` response (`Content-Range` shifted by +1, body correct) without error, and returned correct tiles because the bytes were right.
+  * *Source:* for 206 responses, none of the three reads `Content-Range`. pmtiles.js reads it only for a 416 answer at offset 0. go-pmtiles checks only the status. pmtiles-rs requires status 206 and a body of exactly the requested length. References are in [results/README.md](results/README.md#go-pmtiles-1312-and-pmtiles-rs-0240).
+* **pmtiles-rs** requires 206 and a body of exactly the requested length. It therefore rejects `status-200-partial-body`, `ignore-range`, `overlong-body`, `expanded-range` and the conforming `short-range`, and never requests the remainder of a short 206. It accepts the shifted `Content-Range`, and it compares ETags on tile reads.
+
+## Standards-based assessment
+
+Only the observations that conflict with a requirement are listed. Everything else in the tables is either conforming client behaviour or a difference from a lab recommendation.
+
+| Observation | Requirement | Assessment |
+|---|---|---|
+| pmtiles.js and go-pmtiles return wrong tile bytes under `short-range` and `expanded-range` | RFC 9110 §15.3.7: a client MUST inspect `Content-Range` of a 206 to determine what is enclosed | conflicts: both responses are valid, and the client used bytes other than those `Content-Range` describes |
+| go-pmtiles reports absent tiles or crashes under `ignore-range` | RFC 9110 §14.2 (servers may ignore Range) and §15.3.1 (a 200 body is the whole representation) | conflicts: a valid 200 is used as if it were the requested range. The crash is a robustness defect in any case. |
+| all three accept `wrong-content-range`; pmtiles.js and go-pmtiles return wrong bytes under `overlong-body` | §15.3.7 (inspect `Content-Range`) | the server is at fault in both scenarios; the clients do not detect it |
+| pmtiles-rs errors on `short-range` | none: the standards do not require a client to fetch the remainder | conforming, but differs from the lab recommendation |
+| pmtiles-rs and pmtiles.js error on `ignore-range` | none | conforming (explicit failure) |
+| go-pmtiles does not flag the ETag change | none: consistency across requests is left to the client | differs from the lab recommendation |
+| no reader times out on `slow-headers` | none | differs from the lab recommendation |
+
+These are observations of specific versions through specific entry points. They are not claims about other versions or other APIs of the same projects.
 
 ## Normal-mode lab choices
 

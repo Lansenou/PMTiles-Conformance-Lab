@@ -1,0 +1,27 @@
+# slow-headers and stall-body without a harness timeout
+# lab: pmtiles-lab serve --dir fixtures --delay 2s --addr 127.0.0.1:18431; tile 0/0/0 of valid/root-none.pmtiles
+# manifest expectation: present b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638
+
+$ go-pmtiles tile http://127.0.0.1:18431/scenarios/slow-headers/valid/root-none.pmtiles 0 0 0
+exit code: 0, elapsed: 6.0 s, stdout: 120 bytes, sha256 b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638
+stdout text (non-zero exit only): 
+stderr: 
+lab trace (status, error per request): bytes=0-16383 206 sent=905 complete; bytes=127-152 206 sent=26 complete; bytes=305-424 206 sent=120 complete
+
+$ pmtiles-rs-tile http://127.0.0.1:18431/scenarios/slow-headers/valid/root-none.pmtiles 0 0 0
+exit code: 0, elapsed: 4.0 s, stdout: 120 bytes, sha256 b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638
+stdout text (non-zero exit only): 
+stderr: 
+lab trace (status, error per request): bytes=0-16383 206 sent=905 complete; bytes=305-424 206 sent=120 complete
+
+$ go-pmtiles tile http://127.0.0.1:18431/scenarios/stall-body/valid/root-none.pmtiles 0 0 0
+exit code: 1, elapsed: 2.0 s, stdout: 103 bytes, sha256 062274fc0a4f5ef6ce0c50bc494647279a7255097d3dc39e8ce87e23f8b8ad81
+stdout text (non-zero exit only): 2026/09/26 23:16:22 main.go:145: Failed to show tile, Failed to read root-none.pmtiles, unexpected EOF
+stderr: 
+lab trace (status, error per request): bytes=0-16383 206 sent=452 aborted_by_scenario
+
+$ pmtiles-rs-tile http://127.0.0.1:18431/scenarios/stall-body/valid/root-none.pmtiles 0 0 0
+exit code: 1, elapsed: 2.0 s, stdout: 0 bytes, sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+stdout text (non-zero exit only): 
+stderr: error decoding response body for url (http://127.0.0.1:18431/scenarios/stall-body/valid/root-none.pmtiles)
+lab trace (status, error per request): bytes=0-16383 206 sent=452 aborted_by_scenario

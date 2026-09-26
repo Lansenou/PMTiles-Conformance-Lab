@@ -1,0 +1,9 @@
+# Check out every text file with LF on all platforms. gofmt rejects CRLF Go
+# sources, bash rejects CRLF scripts, and the fixture corpus is compared
+# byte for byte with a fresh generation.
+* text=auto eol=lf
+
+# The fixture corpus (archives, manifest.json, SHA256SUMS) is generated
+# output: never convert it.
+/fixtures/** -text
+*.pmtiles binary

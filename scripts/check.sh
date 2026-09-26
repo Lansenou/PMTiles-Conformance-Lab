@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Local and CI quality gate. CI runs exactly this script.
 # Needs only a Go toolchain; binds only 127.0.0.1 ephemeral ports; no network.
+# The race detector needs cgo and a C compiler. Where there is none (for
+# example a portable Go on Windows), SKIP_RACE=1 skips that one step; Linux
+# CI always runs it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,7 +22,15 @@ step "go test"
 go test -count=1 ./...
 
 step "go test -race"
-go test -race -count=1 ./...
+if [ "${SKIP_RACE:-0}" = 1 ]; then
+  echo "SKIPPED (SKIP_RACE=1): the race detector did not run"
+elif [ "$(go env CGO_ENABLED)" != 1 ]; then
+  echo "the race detector needs cgo (go env CGO_ENABLED is not 1)."
+  echo "Install a C compiler, or rerun with SKIP_RACE=1 to skip this step."
+  exit 1
+else
+  go test -race -count=1 ./...
+fi
 
 step "fixtures: regenerate and compare with committed corpus"
 tmp=$(mktemp -d)
