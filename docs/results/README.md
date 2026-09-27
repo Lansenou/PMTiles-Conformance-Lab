@@ -61,6 +61,8 @@ Source references used in [../scenarios.md](../scenarios.md), from the module an
 * the raw headers of the answer to `bytes=0-16383` and its lab trace;
 * the lab trace of one tile lookup by each reader.
 
+Each lookup runs once, and its exit code, byte count and SHA-256 are all checked. The script exits 1 if `verify`, `show`, `inspect` or any lookup fails. Sections 5 and 6 are observations only and do not affect the result.
+
 Only the `normal` scenario was used. No reader was run against `exact-8192` under a fault scenario.
 
 ## pmtiles npm 4.5.0
