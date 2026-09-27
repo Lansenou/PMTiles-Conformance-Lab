@@ -73,13 +73,19 @@ func (r rawResponse) field(name string) []string {
 // server closes the connection.
 func rawGet(t *testing.T, ts *httptest.Server, path, rng string) rawResponse {
 	t.Helper()
+	return rawGetProto(t, ts, "HTTP/1.1", path, rng)
+}
+
+// rawGetProto is rawGet with the given request protocol version.
+func rawGetProto(t *testing.T, ts *httptest.Server, proto, path, rng string) rawResponse {
+	t.Helper()
 	c, err := net.Dial("tcp", ts.Listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(10 * time.Second))
-	req := "GET " + path + " HTTP/1.1\r\nHost: lab.test\r\nRange: " + rng + "\r\nConnection: close\r\n\r\n"
+	req := "GET " + path + " " + proto + "\r\nHost: lab.test\r\nRange: " + rng + "\r\nConnection: close\r\n\r\n"
 	if _, err := io.WriteString(c, req); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +174,8 @@ func TestExact8192OpeningRange(t *testing.T) {
 // TestIgnoreRangeFraming: against leaves-gzip (larger than 16 KiB), a Range
 // GET under ignore-range gets the full archive as a 200 with Content-Length;
 // under ignore-range-no-length the same 200 has no Content-Length and is
-// chunked, and the complete body is delivered before the server closes.
+// chunked (close-delimited for an HTTP/1.0 request), and the complete body is
+// delivered before the server closes.
 func TestIgnoreRangeFraming(t *testing.T) {
 	s, ts, m, data := corpusLab(t)
 	a := manifestArchive(t, m, "leaves-gzip")
@@ -179,17 +186,21 @@ func TestIgnoreRangeFraming(t *testing.T) {
 	etag := rangeserver.NewFile(a.File, file).ETag
 	for _, c := range []struct {
 		scenario string
+		proto    string
 		length   string // Content-Length on the wire; "" for none
 		chunked  bool
 	}{
-		{"ignore-range", "29229", false},
-		{"ignore-range-no-length", "", true},
+		{"ignore-range", "HTTP/1.1", "29229", false},
+		{"ignore-range-no-length", "HTTP/1.1", "", true},
+		// HTTP/1.0 has no chunked coding: the body is delimited by the
+		// server closing the connection (RFC 9112 §6.3, last rule).
+		{"ignore-range-no-length", "HTTP/1.0", "", false},
 	} {
-		t.Run(c.scenario, func(t *testing.T) {
+		t.Run(c.scenario+"-"+c.proto, func(t *testing.T) {
 			s.Reset()
 			path := "/scenarios/" + c.scenario + "/" + a.File
-			r := rawGet(t, ts, path, "bytes=0-16383")
-			if r.status != "HTTP/1.1 200 OK" {
+			r := rawGetProto(t, ts, c.proto, path, "bytes=0-16383")
+			if r.status != c.proto+" 200 OK" {
 				t.Fatalf("status line %q", r.status)
 			}
 			if cr := r.field("Content-Range"); len(cr) != 0 {
@@ -211,7 +222,7 @@ func TestIgnoreRangeFraming(t *testing.T) {
 					t.Fatalf("chunked decoding: %v", err)
 				}
 				body = dec
-			} else if len(cl) != 1 || cl[0] != c.length || len(te) != 0 {
+			} else if len(te) != 0 || (c.length == "" && len(cl) != 0) || (c.length != "" && (len(cl) != 1 || cl[0] != c.length)) {
 				t.Fatalf("Content-Length %q, Transfer-Encoding %q", cl, te)
 			}
 			if len(body) != len(file) || !bytes.Equal(body, file) {

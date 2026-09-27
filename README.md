@@ -171,7 +171,7 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 
 * **Internal compression:** none and gzip are decoded. brotli and zstd are reported as `unsupported_compression`. Unknown values are reported as `unknown_compression`. Nothing is treated as uncompressed silently.
 * **Tile types:** fixtures are PNG only; MVT and other tile types are not generated. Tile bytes are compared as stored.
-* **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS. A 200 without `Content-Length` is covered only by `ignore-range-no-length` (chunked; close-delimited for an HTTP/1.0 request); 206 responses always carry `Content-Length`.
+* **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS. A 200 without `Content-Length` is covered only by `ignore-range-no-length` (chunked for HTTP/1.1; close-delimited for an HTTP/1.0 request, which net/http answers and a test covers); 206 responses always carry `Content-Length`.
 * **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
 * **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). macOS is not tested. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.

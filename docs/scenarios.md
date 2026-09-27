@@ -2,7 +2,7 @@
 
 A scenario is selected per request with `/scenarios/<name>/<file>`, or for plain `/<file>` URLs with `serve --scenario NAME`. Names are stable. Each fault changes one behaviour of `normal`; the "one change at a time" test in `internal/scenarios` compares every fault with `normal` for the same request.
 
-One scenario is a variant rather than a single change from `normal`: `ignore-range-no-length` is `ignore-range` with different message framing. Compared with `normal` it differs in status, `Content-Range`, `Content-Length`, body and framing; compared with `ignore-range` it differs only in `Content-Length` and framing. Both comparisons are asserted (`TestOneChangeAtATime`, `TestFramingVariant`).
+One scenario is a variant rather than a single change from `normal`: `ignore-range-no-length` is `ignore-range` with different message framing. Compared with `normal` it differs, for a satisfiable Range, in status, `Content-Range`, `Content-Length`, body and framing; where `normal` already answers 200 (invalid or multiple ranges, an `If-Range` mismatch) only `Content-Length` and framing differ. Compared with `ignore-range` it differs only in `Content-Length` and framing. Both comparisons are asserted (`TestOneChangeAtATime`, `TestFramingVariant`).
 
 ## Three kinds of statement
 

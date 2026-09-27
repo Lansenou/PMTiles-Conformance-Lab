@@ -27,7 +27,7 @@ tile   valid/exact-8192.pmtiles: 6/6 manifest expectations match
 oracle result: PASS
 ```
 
-The three 0.2.0 archives are byte-identical in 0.3.0; the run on 2026-09-26 against generator 0.2.0 gave the same first six lines. `exact-8192` was also read over HTTP by go-pmtiles and pmtiles-rs 0.24.0: [results/exact-8192-independent.txt](results/exact-8192-independent.txt).
+The three 0.2.0 archives are byte-identical in 0.3.0; the run on 2026-09-26 against generator 0.2.0 gave the same six verify and tile lines. `exact-8192` was also read over HTTP by go-pmtiles and pmtiles-rs 0.24.0: [results/exact-8192-independent.txt](results/exact-8192-independent.txt).
 
 `go-pmtiles show` reported the same header facts as the manifest: zoom range, clustered flag, compression, and addressed-tile, entry and content counts.
 
