@@ -24,6 +24,20 @@ type spec struct {
 	tiles       []tile
 	absent      [][3]uint32 // z, x, y coordinates recorded as absent
 	leafSize    int         // 0: root only; otherwise max tile entries per leaf
+	// The fields below are set only by the MVT corpus. Zero values keep the
+	// PNG fixtures byte for byte as they were.
+	tileType        pmtiles.TileType    // 0: PNG
+	tileCompression pmtiles.Compression // 0: none
+	blobs           map[string][]byte   // nil: contents
+	meta            []byte              // nil: metadataFor
+}
+
+// blobMap returns the content blobs the spec's tiles refer to.
+func (s spec) blobMap() map[string][]byte {
+	if s.blobs != nil {
+		return s.blobs
+	}
+	return contents
 }
 
 // built is an assembled archive plus facts needed for the manifest.
@@ -78,7 +92,7 @@ func compress(c pmtiles.Compression, b []byte) []byte {
 // runs. Data is laid out in order of first appearance, so the archive is
 // clustered. It returns the entries, the tile data section and the offset of
 // each content key inside it.
-func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, map[string]uint64) {
+func buildEntries(tiles []tile, blobs map[string][]byte) ([]pmtiles.Entry, []byte, map[string]uint64) {
 	type item struct {
 		id      uint64
 		content string
@@ -101,7 +115,7 @@ func buildEntries(tiles []tile) ([]pmtiles.Entry, []byte, map[string]uint64) {
 	offsets := map[string]uint64{}
 	var entries []pmtiles.Entry
 	for _, it := range items {
-		blob, ok := contents[it.content]
+		blob, ok := blobs[it.content]
 		if !ok {
 			panic("unknown content " + it.content)
 		}
@@ -170,7 +184,7 @@ func build(s spec) built { return buildWith(s, nil) }
 type leafHook func(i int, off, firstID uint64, enc []byte) []byte
 
 func buildWith(s spec, hook leafHook) built {
-	entries, data, offsets := buildEntries(s.tiles)
+	entries, data, offsets := buildEntries(s.tiles, s.blobMap())
 	var addressed uint64
 	minZ, maxZ := uint8(255), uint8(0)
 	for _, e := range entries {
@@ -195,6 +209,12 @@ func buildWith(s spec, hook leafHook) built {
 		MaxLatE7:            pmtiles.E7(85.0511287),
 		CenterZoom:          minZ,
 	}
+	if s.tileType != 0 {
+		h.TileType = s.tileType
+	}
+	if s.tileCompression != 0 {
+		h.TileCompression = s.tileCompression
+	}
 	rootEntries := entries
 	var leaves []byte
 	if s.leafSize > 0 {
@@ -210,7 +230,10 @@ func buildWith(s spec, hook leafHook) built {
 		}
 	}
 	rootRaw := pmtiles.EncodeDirectory(rootEntries)
-	meta := metadataFor(s)
+	meta := s.meta
+	if meta == nil {
+		meta = metadataFor(s)
+	}
 	b := assemble(h, compress(s.compression, rootRaw), compress(s.compression, meta), leaves, data)
 	hdr, err := pmtiles.DecodeHeader(b)
 	if err != nil {

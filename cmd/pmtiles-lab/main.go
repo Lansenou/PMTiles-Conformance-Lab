@@ -1,5 +1,6 @@
-// Command pmtiles-lab generates PMTiles v3 conformance fixtures, inspects
-// archives, serves them with scripted HTTP range faults, and probes servers.
+// Command pmtiles-lab generates PMTiles v3 conformance fixtures and a shared
+// MVT corpus, inspects archives, serves them with scripted HTTP range faults,
+// serves PBF MBTiles as TileJSON plus XYZ, and checks both delivery paths.
 package main
 
 import (
@@ -21,7 +22,7 @@ const (
 	exitRuntime = 3
 )
 
-const usage = `pmtiles-lab: PMTiles v3 conformance lab
+const usage = `pmtiles-lab: PMTiles v3 conformance lab and small tile delivery test tool
 
 Usage:
   pmtiles-lab generate --out DIR [--force]
@@ -29,6 +30,8 @@ Usage:
   pmtiles-lab serve (--archive FILE | --dir DIR) [--scenario NAME] [--addr 127.0.0.1:0] [--delay 2s]
   pmtiles-lab probe --url URL --manifest FILE [--archive NAME] [--json] [--timeout 5s]
   pmtiles-lab scenarios [--json]
+  pmtiles-lab serve-xyz --mbtiles FILE [--addr 127.0.0.1:0] [--public-url URL]
+  pmtiles-lab tilecheck (--pmtiles FILE|URL | --tilejson URL) --manifest FILE [--json]
   pmtiles-lab version
 
 Exit codes: 0 ok, 1 check failed, 2 usage error, 3 I/O or runtime error.
@@ -58,6 +61,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"serve":     cmdServe,
 		"probe":     cmdProbe,
 		"scenarios": cmdScenarios,
+		"serve-xyz": cmdServeXYZ,
+		"tilecheck": cmdTileCheck,
 		"version":   cmdVersion,
 	}
 	name := args[0]

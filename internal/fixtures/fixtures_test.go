@@ -37,8 +37,10 @@ var golden = map[string]string{
 	"malformed/unknown-compression.pmtiles": "60201d23478c1d0ecc0e17db858c7299422142dcbe45b81e9511b740b539df2d",
 	"malformed/varint-overflow.pmtiles":     "e15630c44d19f297a1d93973b0a08190d3f5c624ac43f651a77e0870456a7f5b",
 	"malformed/zero-length-entry.pmtiles":   "e7c4f0250ea5cabb4c401fcb268ddabce93c0baaf6571d48548fcca4c4a019e8",
-	"SHA256SUMS":                            "acfe22d138d58cb30c26096c15cbecc8a5e1e7145d70e7f58a6f73ce46e533f5",
-	"manifest.json":                         "c0dc38b15d8169e5b4666dd9d365e55a5eb8e6984e06e2731b9a0a033c6a9239",
+	"SHA256SUMS":                            "4802776e02b910d3c56919c9af5a9ec8d8a198e19a3d306ad2b296eb91039b5e",
+	"manifest.json":                         "a3af5b550ff84d939a30f8eb273ea2e355737e71b62bf9a8fe7d0f4af35462ad",
+	"mvt/points.mbtiles":                    "05c1a66c8acaf3d5e17275d6e72f2f7b0689af191aac8d4de309e020030fdb01",
+	"mvt/points.pmtiles":                    "86323bf17d7eec9571e1d83e03e6c7b57571c0e55d8f2a940b5a35761095547f",
 	"unsupported/unsupported-zstd.pmtiles":  "452fbe37d1abb699ea97d8cbd81dc3d3fe4e6ad795b39d2f56c5e5126fc73be2",
 	"valid/exact-8192.pmtiles":              "f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794",
 	"valid/leaves-gzip.pmtiles":             "b5a327ce9a6762385a695e1e5bec4a83bfa3b559780403feb3c0a2fb72cea5ce",
@@ -46,7 +48,7 @@ var golden = map[string]string{
 	"valid/root-none.pmtiles":               "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
 }
 
-const goldenVersion = "0.3.0"
+const goldenVersion = "0.4.0"
 
 func TestGolden(t *testing.T) {
 	if Version != goldenVersion {

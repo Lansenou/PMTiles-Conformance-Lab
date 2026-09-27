@@ -7,6 +7,8 @@ type Manifest struct {
 	Generator Generator `json:"generator"`
 	Spec      SpecRef   `json:"spec"`
 	Archives  []Archive `json:"archives"`
+	// MVTCorpus is optional; absent in manifests before generator 0.4.0.
+	MVTCorpus *MVTCorpus `json:"mvt_corpus,omitempty"`
 }
 
 // Generator identifies the program that wrote the corpus.
@@ -65,4 +67,72 @@ type TileExpect struct {
 type LeafRef struct {
 	ArchiveOffset uint64 `json:"archive_offset"`
 	Length        uint64 `json:"length"`
+}
+
+// MVTCorpus is the shared MVT corpus (manifest field "mvt_corpus", added in
+// generator 0.4.0; documented in docs/fixtures.md). It is separate from
+// Archives, so tools that iterate Archives see the same entries as before.
+type MVTCorpus struct {
+	Name            string        `json:"name"`
+	Description     string        `json:"description"`
+	ContentRights   string        `json:"content_rights"`
+	GeneratorInputs string        `json:"generator_inputs"`
+	TileFormat      string        `json:"tile_format"`
+	TileCompression string        `json:"tile_compression"`
+	Extent          int           `json:"extent"`
+	VectorLayers    []VectorLayer `json:"vector_layers"`
+	Files           []CorpusFile  `json:"files"`
+	Tiles           []CorpusTile  `json:"tiles"`
+}
+
+// VectorLayer is a TileJSON / MBTiles vector_layers entry.
+type VectorLayer struct {
+	ID          string            `json:"id"`
+	Description string            `json:"description,omitempty"`
+	Fields      map[string]string `json:"fields"`
+	MinZoom     int               `json:"minzoom"`
+	MaxZoom     int               `json:"maxzoom"`
+}
+
+// CorpusFile is one packaging of the corpus.
+type CorpusFile struct {
+	Format      string `json:"format"` // pmtiles or mbtiles
+	File        string `json:"file"`
+	SHA256      string `json:"sha256"`
+	Size        int    `json:"size"`
+	Description string `json:"description"`
+}
+
+// CorpusTile is the expected content at one XYZ coordinate. SHA256 and
+// Length describe the stored gzip bytes (identical in both files);
+// MVTSHA256 the decompressed MVT.
+type CorpusTile struct {
+	Z         uint8             `json:"z"`
+	X         uint32            `json:"x"`
+	Y         uint32            `json:"y"`
+	TMSRow    uint32            `json:"tms_row"`
+	Status    string            `json:"status"` // present or absent
+	Purpose   string            `json:"purpose"`
+	SHA256    string            `json:"sha256,omitempty"`
+	Length    uint64            `json:"length,omitempty"`
+	MVTSHA256 string            `json:"mvt_sha256,omitempty"`
+	Features  []ExpectedFeature `json:"features,omitempty"`
+	PMTiles   *PMTilesLookup    `json:"pmtiles"`
+}
+
+// PMTilesLookup is the expected lookup in the corpus PMTiles archive.
+type PMTilesLookup struct {
+	TileID        uint64   `json:"tile_id"`
+	ArchiveOffset *uint64  `json:"archive_offset,omitempty"`
+	LeafDirectory *LeafRef `json:"leaf_directory,omitempty"`
+}
+
+// ExpectedFeature is one decoded feature. Coordinates are tile pixel
+// coordinates (origin top-left, 0..extent).
+type ExpectedFeature struct {
+	Layer       string         `json:"layer"`
+	ID          uint64         `json:"id"`
+	Type        string         `json:"type"`
+	Coordinates []int64        `json:"coordinates"`
+	Properties  map[string]any `json:"properties"`
 }

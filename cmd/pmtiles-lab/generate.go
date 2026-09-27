@@ -8,8 +8,13 @@ import (
 	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
 )
 
+// version is the CLI release version, set at release build time with
+// -ldflags "-X main.version=v0.4.N". It is independent of fixtures.Version,
+// the generator (corpus) version.
+var version = "dev"
+
 func cmdVersion(_ context.Context, _ []string, stdout, _ io.Writer) error {
-	fmt.Fprintf(stdout, "pmtiles-lab %s (fixtures %s, PMTiles spec %s)\n", fixtures.Version, fixtures.Version, "v3.6@8b8ddea")
+	fmt.Fprintf(stdout, "pmtiles-lab %s (fixtures generator %s, PMTiles spec %s)\n", version, fixtures.Version, "v3.6@8b8ddea")
 	return nil
 }
 
@@ -35,6 +40,9 @@ func cmdGenerate(_ context.Context, args []string, stdout, stderr io.Writer) err
 	for _, a := range m.Archives {
 		fmt.Fprintf(stdout, "%-11s %-40s %s\n", a.Kind, a.File, a.SHA256)
 	}
-	fmt.Fprintf(stdout, "wrote %d archives and manifest.json to %s\n", len(m.Archives), *out)
+	for _, f := range m.MVTCorpus.Files {
+		fmt.Fprintf(stdout, "%-11s %-40s %s\n", "mvt-corpus", f.File, f.SHA256)
+	}
+	fmt.Fprintf(stdout, "wrote %d archives, %d mvt corpus files and manifest.json to %s\n", len(m.Archives), len(m.MVTCorpus.Files), *out)
 	return nil
 }

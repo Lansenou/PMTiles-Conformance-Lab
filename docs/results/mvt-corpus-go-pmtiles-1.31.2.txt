@@ -1,0 +1,13 @@
+# scripts/oracle-go-pmtiles.sh fixtures, run 2026-09-27 on linux/amd64 with go1.24.7, repository generator 0.4.0
+oracle: go-pmtiles v1.31.2
+verify valid/root-none.pmtiles: exit 0
+tile   valid/root-none.pmtiles: 11/11 manifest expectations match
+verify valid/root-gzip.pmtiles: exit 0
+tile   valid/root-gzip.pmtiles: 11/11 manifest expectations match
+verify valid/leaves-gzip.pmtiles: exit 0
+tile   valid/leaves-gzip.pmtiles: 32/32 manifest expectations match
+verify valid/exact-8192.pmtiles: exit 0
+tile   valid/exact-8192.pmtiles: 6/6 manifest expectations match
+verify mvt/points.pmtiles: exit 0
+tile   mvt/points.pmtiles: 10/10 mvt_corpus expectations match
+oracle result: PASS

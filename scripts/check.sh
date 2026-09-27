@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Local and CI quality gate. CI runs exactly this script.
-# Needs only a Go toolchain; binds only 127.0.0.1 ephemeral ports; no network.
+# Needs only a Go toolchain; binds only 127.0.0.1 ephemeral ports. Network
+# is used only to download the pinned Go modules (go.sum, verify/go.sum).
 # The race detector needs cgo and a C compiler. Where there is none (for
 # example a portable Go on Windows), SKIP_RACE=1 skips that one step; Linux
 # CI always runs it.
@@ -39,6 +40,12 @@ go run ./cmd/pmtiles-lab generate --out "$tmp/fixtures" >/dev/null
 diff -r fixtures "$tmp/fixtures"
 (cd fixtures && sha256sum --check --quiet SHA256SUMS)
 echo "committed fixtures match a fresh generation"
+
+step "independent verification module (orb MVT decoder, SQLite engine)"
+(cd verify && go vet ./... && go test -count=1 ./...)
+
+step "tilecheck: committed MVT corpus"
+go run ./cmd/pmtiles-lab tilecheck --pmtiles fixtures/mvt/points.pmtiles --manifest fixtures/manifest.json | tail -2
 
 step "fuzz smoke (bounded)"
 go test -run='^$' -fuzz='^FuzzOpen$' -fuzztime="${FUZZTIME:-10s}" ./internal/pmtiles
