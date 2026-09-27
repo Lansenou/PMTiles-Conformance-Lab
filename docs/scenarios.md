@@ -2,6 +2,8 @@
 
 A scenario is selected per request with `/scenarios/<name>/<file>`, or for plain `/<file>` URLs with `serve --scenario NAME`. Names are stable. Each fault changes one behaviour of `normal`; the "one change at a time" test in `internal/scenarios` compares every fault with `normal` for the same request.
 
+One scenario is a variant rather than a single change from `normal`: `ignore-range-no-length` is `ignore-range` with different message framing. Compared with `normal` it differs in status, `Content-Range`, `Content-Length`, body and framing; compared with `ignore-range` it differs only in `Content-Length` and framing. Both comparisons are asserted (`TestOneChangeAtATime`, `TestFramingVariant`).
+
 ## Three kinds of statement
 
 This page keeps three things apart:
@@ -24,6 +26,7 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 | `expanded-range` | 16 more bytes than requested, accurate `Content-Range` (206) | valid but unusual: §14.2 says the 206 SHOULD correspond to the requested range | use `Content-Range` (§15.3.7: "A client MUST inspect a 206 response's Content-Type and Content-Range field(s)") or reject |
 | `short-range` | 206 omitting the last byte of the requested range, accurate `Content-Range` | conforming: "a server might want to send only a subset of the data requested" (§15.3.7) | request the remaining bytes (lab recommendation); never use the short body as the whole range (§15.3.7) |
 | `ignore-range` | full 200 for Range requests | conforming (§14.2 permits ignoring Range) | slice the full body, or fail explicitly; never treat the 200 body as the requested range (§15.3.1) |
+| `ignore-range-no-length` | as `ignore-range`, but every 200 answer to a GET with a Range header has no `Content-Length` and is sent with `Transfer-Encoding: chunked` (HTTP/1.1 requests; an HTTP/1.0 request gets the body delimited by closing the connection) | conforming: §14.2 permits ignoring Range, and chunked coding delimits the body without `Content-Length` (RFC 9112 §6.1, §6.3; a sender MUST NOT send both, §6.2) | as `ignore-range`; do not require `Content-Length` to accept a 200, and bound how many bytes you read, since the full archive may be large (lab recommendation) |
 | `always-416` | 416 `bytes */SIZE` for every Range request | deliberately invalid for satisfiable ranges (§15.5.17) | stop with a clear error |
 | `etag-change` | ETag differs after the first GET/HEAD; bytes unchanged | each response conforms; the validator is inconsistent across requests | detect, then refetch or fail (lab recommendation; `If-Match`/`If-Range`, §13.1, are the standard tools) |
 | `slow-headers` | headers delayed by `--delay` | conforming | have a timeout of its own (lab recommendation) |
@@ -34,7 +37,7 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 
 ## Observed: the lab probe
 
-`pmtiles-lab probe` is the lab's reference client with a strict policy. Its results for all three valid fixtures are pinned in `internal/probe/scenarios_test.go`; below is `valid/root-none.pmtiles`.
+`pmtiles-lab probe` is the lab's reference client with a strict policy. Its results for all four valid fixtures are pinned in `internal/probe/scenarios_test.go`; below is `valid/root-none.pmtiles`.
 
 | Scenario | Probe |
 |---|---|
@@ -46,6 +49,7 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 | `expanded-range` | pass with 8 warnings (uses the covered bytes) |
 | `short-range` | pass, 18 requests (fetches each remainder) |
 | `ignore-range` | pass with 9 warnings (slices the full body) |
+| `ignore-range-no-length` | pass with 9 warnings (slices the full body; `Content-Length` is not needed) |
 | `always-416` | fail `unexpected_status` at request 1 |
 | `etag-change` | fail `etag_changed` at request 2 (strict policy) |
 | `slow-headers` | fail `timeout` at request 1 (probe default 5 s; the test uses a 0.5 s request timeout against a 10 s server delay) |
@@ -54,7 +58,7 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 
 ## Observed: three third-party readers
 
-The same 15 scenarios × 3 valid fixtures were run on 2026-09-26 against three independent PMTiles readers, each through one entry point:
+The original 15 scenarios × the original 3 valid fixtures (`root-none`, `root-gzip`, `leaves-gzip`, generator 0.2.0) were run on 2026-09-26 against three independent PMTiles readers, each through one entry point. `ignore-range-no-length` and `exact-8192` were added later (generator 0.3.0) and were **not** run through these matrices; the table below says nothing about them. The only third-party observation of `exact-8192` is the one in [Boundary cases](#boundary-cases).
 
 * **pmtiles npm 4.5.0:** `examples/pmtiles-js/run-scenarios.mjs`, one `PMTiles` instance (`FetchSource`) per run.
 * **go-pmtiles 1.31.2:** the `go-pmtiles tile URL Z X Y` CLI command via `examples/cli-readers/run-scenarios.mjs`, one process per tile.
@@ -97,6 +101,22 @@ Notes on the observations:
   * *Source:* for 206 responses, none of the three reads `Content-Range`. pmtiles.js reads it only for a 416 answer at offset 0. go-pmtiles checks only the status. pmtiles-rs requires status 206 and a body of exactly the requested length. References are in [results/README.md](results/README.md#go-pmtiles-1312-and-pmtiles-rs-0240).
 * **pmtiles-rs** requires 206 and a body of exactly the requested length. It therefore rejects `status-200-partial-body`, `ignore-range`, `overlong-body`, `expanded-range` and the conforming `short-range`, and never requests the remainder of a short 206. It accepts the shifted `Content-Range`, and it compares ETags on tile reads.
 
+## Boundary cases
+
+Two cases added in generator 0.3.0 isolate the size and framing of the first response.
+
+**`exact-8192` under `normal`: the opening range is clamped.** The archive is exactly 8192 bytes and ends with its last tile byte, so the usual 16 KiB opening request covers the whole file.
+
+* *HTTP validity:* `bytes=0-16383` is satisfiable. A last-pos at or past the end is replaced by the last byte (RFC 9110 §14.1.1), so the conforming answer is `206` with `Content-Range: bytes 0-8191/8192` and an 8192-byte body (§14.4, §15.3.7). `TestExact8192OpeningRange` checks this on the wire, with the lab trace.
+* *Lab recommendation:* take the length from `Content-Range` (the client MUST inspect it, §15.3.7), accept a body shorter than requested when `Content-Range` says the file ends there, and treat it as the whole archive. Everything a lookup needs is then already in hand: the same test resolves every manifest coordinate from that one body and checks each present tile's SHA-256 at its manifest `archive_offset`, with no second request. Reusing the bytes is an optimisation the lab suggests; a client that requests them again is not non-conforming.
+* *Observed* (2026-09-27, [results/exact-8192-independent.txt](results/exact-8192-independent.txt), `normal` only): `go-pmtiles verify` accepts the file and go-pmtiles 1.31.2 (`tile`, local file and HTTP) and pmtiles-rs 0.24.0 (HTTP) return every manifest tile correctly. For tile 1/0/1, go-pmtiles made 3 requests (the opening range, the root directory again, then the tile) and pmtiles-rs 2 (the opening range, then the tile); neither reused the bytes of the first response. The lab probe also requests each tile separately (5 requests), by design. pmtiles.js was not run.
+
+**`ignore-range-no-length` on `leaves-gzip` (29229 bytes, larger than the 16 KiB opening request).**
+
+* *HTTP validity:* conforming, as in the table above.
+* *Lab check:* `TestIgnoreRangeFraming` reads the raw HTTP/1.1 response for `bytes=0-16383`: `200 OK`, no `Content-Length`, `Transfer-Encoding: chunked`, a last chunk that ends the message, and a decoded body equal to the whole archive. The trace records `status` 200, no `content_length`, `bytes_sent` 29229 and `complete: true`. The same test shows that `ignore-range` sends `Content-Length: 29229`.
+* *Observed:* only the lab probe (pass with warnings). No third-party reader has been run against this scenario.
+
 ## Standards-based assessment
 
 Only the observations that conflict with a requirement are listed. Everything else in the tables is either conforming client behaviour or a difference from a lab recommendation.
@@ -115,7 +135,7 @@ These are observations of specific versions through specific entry points. They 
 
 ## Normal-mode lab choices
 
-Strong ETag `"sha256-<first 16 hex of the file hash>"`, `Accept-Ranges: bytes`, `Content-Type: application/vnd.pmtiles`, `Cache-Control: no-store`, no `Last-Modified`. Multiple ranges get the full 200 (no multipart). Invalid syntax and unknown units are ignored (200). A suffix range on an empty file is ignored. Huge positions saturate, so a huge last-pos is clamped and a huge first-pos gives 416. CORS: `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag, Content-Range, Accept-Ranges`. Preflight gets 204 with `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`, `Access-Control-Allow-Headers: Range, If-Match, If-None-Match, If-Range` and `Access-Control-Max-Age: 60`. 404 responses also carry CORS and pass through the scenario hook. `etag-change` counts only GET/HEAD, so a browser preflight does not use up the first ETag. `always-416` and `ignore-range` do not override 304/412, which RFC 9110 §13.2.2 evaluates before Range.
+Strong ETag `"sha256-<first 16 hex of the file hash>"`, `Accept-Ranges: bytes`, `Content-Type: application/vnd.pmtiles`, `Cache-Control: no-store`, no `Last-Modified`. Multiple ranges get the full 200 (no multipart). Invalid syntax and unknown units are ignored (200). A suffix range on an empty file is ignored. Huge positions saturate, so a huge last-pos is clamped and a huge first-pos gives 416. CORS: `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag, Content-Range, Accept-Ranges`. Preflight gets 204 with `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`, `Access-Control-Allow-Headers: Range, If-Match, If-None-Match, If-Range` and `Access-Control-Max-Age: 60`. 404 responses also carry CORS and pass through the scenario hook. `etag-change` counts only GET/HEAD, so a browser preflight does not use up the first ETag. `always-416`, `ignore-range` and `ignore-range-no-length` do not override 304/412, which RFC 9110 §13.2.2 evaluates before Range.
 
 ## Browser CORS (verified in Chromium)
 

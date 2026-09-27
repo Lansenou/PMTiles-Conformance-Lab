@@ -12,7 +12,7 @@ scripts/oracle-go-pmtiles.sh
 
 It installs `github.com/protomaps/go-pmtiles@v1.31.2` into a temporary directory. For every valid fixture it runs `go-pmtiles verify FILE`. For every manifest tile it runs `go-pmtiles tile FILE Z X Y` and compares the SHA-256 of the output with the manifest. For absent tiles it expects empty output.
 
-Result on 2026-09-26 against the committed corpus (generator 0.2.0):
+Result on 2026-09-27 against the committed corpus (generator 0.3.0; go-pmtiles built with Go 1.26.8, selected automatically because v1.31.2 needs Go 1.25 or later):
 
 ```
 oracle: go-pmtiles v1.31.2
@@ -22,8 +22,12 @@ verify valid/root-gzip.pmtiles: exit 0
 tile   valid/root-gzip.pmtiles: 11/11 manifest expectations match
 verify valid/leaves-gzip.pmtiles: exit 0
 tile   valid/leaves-gzip.pmtiles: 32/32 manifest expectations match
+verify valid/exact-8192.pmtiles: exit 0
+tile   valid/exact-8192.pmtiles: 6/6 manifest expectations match
 oracle result: PASS
 ```
+
+The three 0.2.0 archives are byte-identical in 0.3.0; the run on 2026-09-26 against generator 0.2.0 gave the same first six lines. `exact-8192` was also read over HTTP by go-pmtiles and pmtiles-rs 0.24.0: [results/exact-8192-independent.txt](results/exact-8192-independent.txt).
 
 `go-pmtiles show` reported the same header facts as the manifest: zoom range, clustered flag, compression, and addressed-tile, entry and content counts.
 
@@ -40,4 +44,4 @@ These results do not decide whether a fixture is malformed; the pinned spec does
 
 ## pmtiles (npm) 4.5.0 (TypeScript, BSD-3-Clause)
 
-`examples/pmtiles-js/run-scenarios.mjs` reads every valid fixture over HTTP from `pmtiles-lab serve` and compares each tile's SHA-256 with the manifest. Under the `normal` scenario it matched 11/11 (root-none), 11/11 (root-gzip) and 32/32 (leaves-gzip) expectations. Full output: [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl).
+`examples/pmtiles-js/run-scenarios.mjs` reads every valid fixture over HTTP from `pmtiles-lab serve` and compares each tile's SHA-256 with the manifest. Under the `normal` scenario it matched 11/11 (root-none), 11/11 (root-gzip) and 32/32 (leaves-gzip) expectations (generator 0.2.0; `exact-8192` did not exist yet and was not run). Full output: [results/pmtiles-js-4.5.0.jsonl](results/pmtiles-js-4.5.0.jsonl).

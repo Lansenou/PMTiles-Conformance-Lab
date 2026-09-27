@@ -3,19 +3,19 @@
 `pmtiles-lab` helps you test a [PMTiles v3](https://github.com/protomaps/PMTiles/blob/8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5/spec/v3/spec.md) reader that fetches archives over HTTP range requests. It gives you:
 
 1. **Fixtures:** small deterministic synthetic archives, valid and deliberately malformed, with a manifest of the expected lookup results (tile hashes and absolute byte ranges).
-2. **Fault server:** a loopback HTTP endpoint that serves raw archive bytes under a named scenario. Each fault changes exactly one thing: a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, and more.
+2. **Fault server:** a loopback HTTP endpoint that serves raw archive bytes under a named scenario. Each fault changes exactly one thing: a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, and more. One scenario, `ignore-range-no-length`, is a documented framing variant of `ignore-range` (no `Content-Length`).
 3. **Trace:** a bounded, machine-readable record of every request your client made and every byte the server sent.
 4. **Probe:** a reference client that runs the same checks and produces an exact JSON report.
 
 The lab is a development and CI tool. It is not a tile server, map renderer, tile downloader or general PMTiles SDK. It uses no real map data and needs no network at test time.
 
-Status: v0.2.0 release candidate, not yet tagged. See [Limits and known gaps](#supported-unsupported-and-known-gaps).
+Status: v0.3.0 candidate (generator 0.3.0), not tagged. See [Limits and known gaps](#supported-unsupported-and-known-gaps).
 
 ## Why
 
 Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
-Observations from running three independent readers through every scenario on 2026-09-26: pmtiles npm 4.5.0 (`FetchSource`), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
+Observations from running three independent readers through the original 15 scenarios and 3 valid fixtures on 2026-09-26 (the two cases added in 0.3.0 were not part of that run): pmtiles npm 4.5.0 (`FetchSource`), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
 
 * **Silent wrong bytes.** pmtiles.js and go-pmtiles `tile` returned wrong tile bytes without an error under `short-range`, `expanded-range` and `overlong-body`. The first two are valid server responses (RFC 9110 §15.3.7, §14.2), and a client MUST inspect `Content-Range` on a 206.
 * **go-pmtiles crash.** go-pmtiles 1.31.2 `tile` exits with a nil-pointer panic on a gzip archive when the server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2). A `go-pmtiles serve` process backed by such a server crashed the same way. Raw evidence: [docs/results/go-pmtiles-1.31.2-ignore-range.txt](docs/results/go-pmtiles-1.31.2-ignore-range.txt).
@@ -134,6 +134,7 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 | `expanded-range` | 16 more bytes than requested, accurate `Content-Range` | valid but unusual |
 | `short-range` | 206 omitting the last requested byte, accurate `Content-Range` | valid (servers may send a subset) |
 | `ignore-range` | full 200 for Range requests | valid (servers may ignore Range) |
+| `ignore-range-no-length` | as `ignore-range`, but the 200 has no `Content-Length` (chunked) | valid (framing variant of `ignore-range`) |
 | `always-416` | 416 for every Range request | invalid for satisfiable ranges |
 | `etag-change` | ETag changes after the first request | each response valid; inconsistent across requests |
 | `slow-headers` | headers delayed by `--delay` (max 10 s) | valid |
@@ -146,9 +147,9 @@ Full table with sources, lab recommendations, the probe's results, three third-p
 
 ## Fixtures
 
-Three valid archives (`root-none`, `root-gzip`, `leaves-gzip`), sixteen malformed ones and one unsupported one (zstd). They cover root-only and leaf lookups, contiguous and deduplicated offsets, run lengths, absent tiles, zoom 0-3 and 12, data beyond the first 16 KiB, bad magic/version, truncation, varint overflow, uint64 section overflow, a root beyond 16 KiB, empty and oversized directories, zero-length and out-of-bounds entries, a leaf cycle and a decompression bomb. Provenance and hashes: [docs/fixtures.md](docs/fixtures.md).
+Four valid archives (`root-none`, `root-gzip`, `leaves-gzip`, `exact-8192`), sixteen malformed ones and one unsupported one (zstd). They cover root-only and leaf lookups, an archive of exactly 8192 bytes whose 16 KiB opening request is answered with the whole file (`206`, `bytes 0-8191/8192`), contiguous and deduplicated offsets, run lengths, absent tiles, zoom 0-3 and 12, data beyond the first 16 KiB, bad magic/version, truncation, varint overflow, uint64 section overflow, a root beyond 16 KiB, empty and oversized directories, zero-length and out-of-bounds entries, a leaf cycle and a decompression bomb. Provenance and hashes: [docs/fixtures.md](docs/fixtures.md).
 
-Two independent readers verify the valid archives: go-pmtiles v1.31.2 (all 54 manifest expectations match) and pmtiles npm 4.5.0 (all match under `normal`). See [docs/oracle.md](docs/oracle.md).
+Independent readers verify the valid archives: go-pmtiles v1.31.2 (all 60 manifest expectations of the four archives match), pmtiles npm 4.5.0 (all match under `normal` for the three 0.2.0 archives) and, for `exact-8192`, pmtiles-rs 0.24.0 over HTTP. See [docs/oracle.md](docs/oracle.md).
 
 ## Limits
 
@@ -170,11 +171,11 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 
 * **Internal compression:** none and gzip are decoded. brotli and zstd are reported as `unsupported_compression`. Unknown values are reported as `unknown_compression`. Nothing is treated as uncompressed silently.
 * **Tile types:** fixtures are PNG only; MVT and other tile types are not generated. Tile bytes are compared as stored.
-* **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS.
+* **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS. A 200 without `Content-Length` is covered only by `ignore-range-no-length` (chunked; close-delimited for an HTTP/1.0 request); 206 responses always carry `Content-Length`.
 * **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
 * **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). macOS is not tested. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.
-* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs.
+* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The scenario matrices cover the original 15 scenarios and 3 valid fixtures only; `exact-8192` was read by go-pmtiles and pmtiles-rs under `normal` only, and no third-party reader has been run against `ignore-range-no-length`.
 * **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It is not a production client.
 
 ## Development
@@ -203,4 +204,4 @@ Layout and ownership: [docs/architecture.md](docs/architecture.md). Contract: [d
 
 ## License
 
-Original code and generated fixtures: MIT ([LICENSE](LICENSE)). The PMTiles specification is public domain / CC0. Tools used outside the Go module are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original code and generated fixtures, including `exact-8192`: MIT ([LICENSE](LICENSE)). The PMTiles specification is public domain / CC0. Tools used outside the Go module are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -132,7 +132,7 @@ func TestCorpusVerdicts(t *testing.T) {
 			t.Errorf("%s: %s: %v\nwant %s at %s containing %q", a.Name, stage, err, want.code, want.stage, want.msg)
 		}
 	}
-	if valid != 3 || len(seen) != len(expectedFailures) {
+	if valid != 4 || len(seen) != len(expectedFailures) {
 		t.Errorf("%d valid archives, %d of %d failure cases present", valid, len(seen), len(expectedFailures))
 	}
 }
@@ -186,7 +186,7 @@ func verdict(b []byte, a fixtures.Archive) []string {
 
 func TestLocateManifestTiles(t *testing.T) {
 	c := generate(t)
-	for _, name := range []string{"root-none", "root-gzip", "leaves-gzip"} {
+	for _, name := range []string{"root-none", "root-gzip", "leaves-gzip", "exact-8192"} {
 		a, b := c.archive(t, name)
 		if len(a.Tiles) == 0 {
 			t.Fatalf("%s: no tile expectations", name)

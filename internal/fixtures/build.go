@@ -57,6 +57,8 @@ var contents = map[string][]byte{
 	// big (96x96, 27812 bytes) pushes every tile stored after it past the
 	// first 16 KiB of the archive.
 	"big": solidPNG(96, 96, 0x20, 0x80, 0x80),
+	// teal (48x52, 7608 bytes) makes exact-8192 exactly 8192 bytes long.
+	"teal": solidPNG(48, 52, 0x30, 0x90, 0x60),
 }
 
 func compress(c pmtiles.Compression, b []byte) []byte {

@@ -44,6 +44,7 @@ func TestScenarioReports(t *testing.T) {
 		{"root-none", "expanded-range", "pass", 9, 8, nil},
 		{"root-none", "short-range", "pass", 18, 9, nil},
 		{"root-none", "ignore-range", "pass", 9, 9, nil},
+		{"root-none", "ignore-range-no-length", "pass", 9, 9, nil},
 		{"root-none", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
 		{"root-none", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
 		{"root-none", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
@@ -60,6 +61,7 @@ func TestScenarioReports(t *testing.T) {
 		{"root-gzip", "expanded-range", "pass", 9, 8, nil},
 		{"root-gzip", "short-range", "pass", 18, 9, nil},
 		{"root-gzip", "ignore-range", "pass", 9, 9, nil},
+		{"root-gzip", "ignore-range-no-length", "pass", 9, 9, nil},
 		{"root-gzip", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
 		{"root-gzip", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
 		{"root-gzip", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
@@ -78,6 +80,7 @@ func TestScenarioReports(t *testing.T) {
 		{"leaves-gzip", "expanded-range", "pass", 27, 27, nil},
 		{"leaves-gzip", "short-range", "pass", 54, 27, nil},
 		{"leaves-gzip", "ignore-range", "pass", 27, 27, nil},
+		{"leaves-gzip", "ignore-range-no-length", "pass", 27, 27, nil},
 		{"leaves-gzip", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
 		{"leaves-gzip", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
 		{"leaves-gzip", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
@@ -85,9 +88,28 @@ func TestScenarioReports(t *testing.T) {
 		{"leaves-gzip", "cors-missing", "pass", 27, 0, nil},
 		{"leaves-gzip", "cors-wrong-origin", "pass", 27, 0, nil},
 		{"leaves-gzip", "cors-no-expose", "pass", 27, 0, nil},
+
+		// exact-8192: the opening request is answered with the whole file
+		// (bytes 0-8191/8192), then one range request per present tile.
+		{"exact-8192", "normal", "pass", 5, 0, nil},
+		{"exact-8192", "wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
+		{"exact-8192", "status-200-partial-body", "fail", 2, 1, []fail{{FailLength, 2}}},
+		{"exact-8192", "truncated-body", "fail", 1, 0, []fail{{FailTruncated, 1}}},
+		{"exact-8192", "overlong-body", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"exact-8192", "expanded-range", "pass", 5, 4, nil},
+		{"exact-8192", "short-range", "pass", 10, 5, nil},
+		{"exact-8192", "ignore-range", "pass", 5, 5, nil},
+		{"exact-8192", "ignore-range-no-length", "pass", 5, 5, nil},
+		{"exact-8192", "always-416", "fail", 1, 0, []fail{{FailStatus, 1}}},
+		{"exact-8192", "etag-change", "fail", 2, 0, []fail{{FailETagChanged, 2}}},
+		{"exact-8192", "slow-headers", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"exact-8192", "stall-body", "fail", 1, 0, []fail{{FailTimeout, 1}}},
+		{"exact-8192", "cors-missing", "pass", 5, 0, nil},
+		{"exact-8192", "cors-wrong-origin", "pass", 5, 0, nil},
+		{"exact-8192", "cors-no-expose", "pass", 5, 0, nil},
 	}
-	if len(cases) != 3*len(scenarios.All()) {
-		t.Fatalf("%d cases for 3 archives x %d scenarios", len(cases), len(scenarios.All()))
+	if len(cases) != 4*len(scenarios.All()) {
+		t.Fatalf("%d cases for 4 archives x %d scenarios", len(cases), len(scenarios.All()))
 	}
 	for _, c := range cases {
 		a := archive(t, m, c.archive)
