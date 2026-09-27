@@ -146,7 +146,7 @@ jobs:
           set -euo pipefail
           tag=$VERSION
           # An existing tag must already point at this commit.
-          if sha=$(gh api "repos/$GH_REPO/commits/refs/tags/$tag" --jq .sha 2>/dev/null); then
+          if sha=$(gh api "repos/$GH_REPO/commits/tags/$tag" --jq .sha 2>/dev/null); then
             if [ "$sha" != "$GITHUB_SHA" ]; then
               echo "tag $tag exists at $sha, not $GITHUB_SHA; refusing to move it"; exit 1
             fi
