@@ -73,6 +73,8 @@ Exit codes: `0` success, `1` check failed (invalid archive, probe failure), `2` 
 
 `archive_offset` values are absolute byte offsets in the file, so a client's trace can be compared directly with the manifest.
 
+Generator 0.4.0 adds an optional top-level `mvt_corpus` object (the shared MVT corpus: files, vector layers and expected decoded features per coordinate), documented in [fixtures.md](fixtures.md#shared-mvt-corpus-added-in-generator-040). The schema identifier and `archives` are unchanged.
+
 ## 7. Fixture corpus
 
 Valid (tile type PNG, tile compression none):
@@ -157,7 +159,7 @@ Each fault changes one behaviour relative to `normal`, except `ignore-range-no-l
 
 ## 12. CI
 
-One workflow with an `ubuntu-latest` job (`timeout-minutes: 15`) and a `windows-latest` job that runs the same script from a default autocrlf checkout without `-race` (no C compiler assumed), `permissions: contents: read`, `concurrency` cancelling superseded runs per ref, actions pinned by full commit SHA, triggers `pull_request` and `push` to `main`. It runs `scripts/check.sh`, the same script documented for local development: `gofmt -l`, `go vet`, `go test ./...`, `go test -race ./...`, regenerate fixtures and compare with the committed corpus, bounded fuzz smoke. Tests bind only `127.0.0.1:0`, need no secrets, and do not contact external services. The npm/Playwright oracle in `examples/` needs registries, so it is a documented manual check, not part of CI. No deployment or publishing. A manually approved release workflow is proposed in the README only after the CLI is stable.
+One workflow with an `ubuntu-latest` job (`timeout-minutes: 15`) and a `windows-latest` job that runs the same script from a default autocrlf checkout without `-race` (no C compiler assumed), `permissions: contents: read`, `concurrency` cancelling superseded runs per ref, actions pinned by full commit SHA, triggers `pull_request` and `push` to `main`. It runs `scripts/check.sh`, the same script documented for local development: `gofmt -l`, `go vet`, `go test ./...`, `go test -race ./...`, regenerate fixtures and compare with the committed corpus, bounded fuzz smoke. Tests bind only `127.0.0.1:0`, need no secrets, and do not contact external services. The npm/Playwright oracle in `examples/` needs registries, so it is a documented manual check, not part of CI. Since 0.4: the same workflow also builds the five CGO-free release binaries, smoke-tests them natively on Linux, Windows and macOS, and on a push to `main` publishes a `v0.4.N` release after all three pass ([release-proposal.md](release-proposal.md)). Pushes to `main` are no longer cancelled by later runs. `check.sh` also runs the `verify/` module, whose Go modules come from the module proxy.
 
 ## 13. Bounded risks
 

@@ -1,4 +1,4 @@
-# scripts/oracle-go-pmtiles.sh fixtures, run 2026-09-27 on linux/amd64 with go1.24.7, repository generator 0.4.0
+# scripts/oracle-go-pmtiles.sh fixtures, run 2026-09-27 on linux/amd64 with go1.24.7, repository generator 0.4.0, manifest sha256 9c1ef7846dd781f5
 oracle: go-pmtiles v1.31.2
 verify valid/root-none.pmtiles: exit 0
 tile   valid/root-none.pmtiles: 11/11 manifest expectations match

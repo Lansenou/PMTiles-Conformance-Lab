@@ -52,7 +52,7 @@ var mvtAbsent = []struct {
 }{
 	{1, 0, 1, "absent; TMS mirror of present 1/0/0"},
 	{2, 1, 3, "absent; TMS mirror of present 2/1/0"},
-	{3, 0, 0, "absent; inside the first leaf's tile-id range"},
+	{3, 0, 0, "absent; tile id 21, inside the second leaf directory's range"},
 }
 
 var mvtVectorLayers = []VectorLayer{{

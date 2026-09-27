@@ -1292,7 +1292,7 @@
         "y": 0,
         "tms_row": 7,
         "status": "absent",
-        "purpose": "absent; inside the first leaf's tile-id range",
+        "purpose": "absent; tile id 21, inside the second leaf directory's range",
         "pmtiles": {
           "tile_id": 21,
           "leaf_directory": {
