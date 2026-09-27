@@ -180,5 +180,8 @@ func printTileCheck(w io.Writer, r *tilecheck.Report) {
 	for _, f := range r.Failures {
 		fmt.Fprintf(w, "FAIL %s: %s\n", f.Code, f.Message)
 	}
-	fmt.Fprintf(w, "tiles: %d/%d matched\nresult: %s\n", r.Summary.TilesMatched, r.Summary.TilesChecked, r.Result)
+	fmt.Fprintf(w, "tiles: %d/%d matched\n", r.Summary.TilesMatched, r.Summary.TilesChecked)
+	fmt.Fprintf(w, "byte-identical to the corpus (informational): stored %d, mvt %d\n",
+		r.Summary.TilesStoredBytesIdentical, r.Summary.TilesMVTBytesIdentical)
+	fmt.Fprintf(w, "result: %s\n", r.Result)
 }

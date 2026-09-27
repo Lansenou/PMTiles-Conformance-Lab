@@ -105,6 +105,7 @@ tilecheck xyz http://127.0.0.1:8081/tiles.json (corpus mvt-points)
   ...
   tile 3/5/2    expected present observed present features=1 ok
 tiles: 10/10 matched
+byte-identical to the corpus (informational): stored 7, mvt 7
 result: pass
 
 $ ./pmtiles-lab tilecheck --pmtiles http://127.0.0.1:8080/mvt/points.pmtiles --manifest fixtures/manifest.json
@@ -115,10 +116,13 @@ tilecheck pmtiles http://127.0.0.1:8080/mvt/points.pmtiles (corpus mvt-points)
   meta vector_layers            ok (points{name:String,rank:Number})
   ...
 tiles: 10/10 matched
+byte-identical to the corpus (informational): stored 7, mvt 7
 result: pass
 ```
 
-With `--json`, both print a `pmtiles-lab-tilecheck/1` report whose `tiles[]` entries carry the stored-bytes SHA-256, the decompressed MVT SHA-256 and the decoded features, so the two paths can be compared field by field (`TestTileCheckBothPaths` and `scripts/smoke.sh` do that). `--pmtiles` also accepts a local file.
+A tile matches when its decoded features equal the manifest's; that alone decides `pass`. A server that re-compresses tiles, or answers `Accept-Encoding: gzip` with an uncompressed tile (which HTTP allows, RFC 9110 §12.5.3), still passes. Byte equality is reported separately: `stored_bytes_identical` (the delivered gzip bytes equal the corpus bytes) and `mvt_bytes_identical` (the decompressed tile does). A gzip body without `Content-Encoding: gzip`, or an encoding that was not requested, fails.
+
+With `--json`, both print a `pmtiles-lab-tilecheck/1` report whose `tiles[]` entries carry the encoding and SHA-256 of the bytes as delivered, the decompressed MVT SHA-256, the byte-equality flags and the decoded features, so the two paths can be compared field by field (`TestTileCheckBothPaths` and `scripts/smoke.sh` do that). `--pmtiles` also accepts a local file.
 
 `serve-xyz` works with any MBTiles 1.3 file whose `format` is `pbf` and whose `json` metadata row has `vector_layers`, including files where `tiles` is a view. It opens the file read-only. It answers:
 

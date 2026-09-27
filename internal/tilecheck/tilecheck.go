@@ -3,6 +3,11 @@
 // plus XYZ endpoint), decodes every tile and compares it with the manifest's
 // expected content. Both paths produce the same report shape, so their
 // results can be compared field by field.
+//
+// A tile matches when its decoded features equal the manifest's. Byte
+// equality with the corpus is reported separately and never decides the
+// result: a server may re-compress tiles, or send them uncompressed (HTTP
+// allows an identity response to Accept-Encoding: gzip, RFC 9110 12.5.3).
 package tilecheck
 
 import (
@@ -63,10 +68,17 @@ type TileResult struct {
 	Expected  string                     `json:"expected"`
 	Observed  string                     `json:"observed"` // present, absent or error
 	Detail    string                     `json:"detail,omitempty"`
-	SHA256    string                     `json:"sha256,omitempty"`
+	Encoding  string                     `json:"encoding,omitempty"` // gzip or identity, as delivered
+	SHA256    string                     `json:"sha256,omitempty"`   // of the bytes as delivered
 	MVTSHA256 string                     `json:"mvt_sha256,omitempty"`
 	Features  []fixtures.ExpectedFeature `json:"features,omitempty"`
-	Match     bool                       `json:"match"`
+	// Exact-byte comparisons with the corpus, reported for present tiles
+	// only; they do not affect Match. StoredBytesIdentical: the delivered
+	// gzip bytes equal the stored bytes (false for an identity response).
+	// MVTBytesIdentical: the decompressed MVT equals the corpus MVT.
+	StoredBytesIdentical bool `json:"stored_bytes_identical"`
+	MVTBytesIdentical    bool `json:"mvt_bytes_identical"`
+	Match                bool `json:"match"` // decoded features equal the manifest's
 }
 
 // Failure is one reason for a fail result.
@@ -75,17 +87,20 @@ type Failure struct {
 	Message string `json:"message"`
 }
 
-// Summary counts tiles.
+// Summary counts tiles. The identical counts are informational.
 type Summary struct {
-	TilesChecked int `json:"tiles_checked"`
-	TilesMatched int `json:"tiles_matched"`
+	TilesChecked              int `json:"tiles_checked"`
+	TilesMatched              int `json:"tiles_matched"`
+	TilesStoredBytesIdentical int `json:"tiles_stored_bytes_identical"`
+	TilesMVTBytesIdentical    int `json:"tiles_mvt_bytes_identical"`
 }
 
 // fetched is what a delivery path returned for one coordinate: nil data for
 // absent, with detail describing the protocol-level observation.
 type fetched struct {
-	data   []byte // stored (gzip) bytes
-	detail string
+	data     []byte // tile bytes as delivered
+	encoding string // gzip or identity
+	detail   string
 }
 
 type source interface {
@@ -113,6 +128,12 @@ func run(ctx context.Context, rep *Report, c *fixtures.MVTCorpus, src source) *R
 		tr := checkTile(ctx, c, t, src)
 		rep.Tiles = append(rep.Tiles, tr)
 		rep.Summary.TilesChecked++
+		if tr.StoredBytesIdentical {
+			rep.Summary.TilesStoredBytesIdentical++
+		}
+		if tr.MVTBytesIdentical {
+			rep.Summary.TilesMVTBytesIdentical++
+		}
 		if tr.Match {
 			rep.Summary.TilesMatched++
 		} else {
@@ -139,20 +160,32 @@ func checkTile(ctx context.Context, c *fixtures.MVTCorpus, t fixtures.CorpusTile
 		tr.Match = t.Status == "absent"
 		return tr
 	}
-	tr.Observed, tr.SHA256 = "present", sum(f.data)
+	tr.Observed, tr.Encoding, tr.SHA256 = "present", f.encoding, sum(f.data)
 	if t.Status != "present" {
 		return tr
 	}
-	var problems []string
-	if tr.SHA256 != t.SHA256 {
-		problems = append(problems, "stored bytes sha256 differs")
-	}
-	raw, err := gunzip(f.data)
-	if err != nil {
-		tr.Detail = strings.TrimSpace(tr.Detail + " gunzip: " + err.Error())
+	raw := f.data
+	switch f.encoding {
+	case "gzip":
+		tr.StoredBytesIdentical = tr.SHA256 == t.SHA256
+		if raw, err = gunzip(f.data); err != nil {
+			tr.Detail = strings.TrimSpace(tr.Detail + " gunzip: " + err.Error())
+			return tr
+		}
+	case "identity":
+		// No MVT starts with 0x1f (wire type 7 does not exist), so this is
+		// a gzip body without Content-Encoding.
+		if bytes.HasPrefix(raw, []byte{0x1f, 0x8b}) {
+			tr.Detail = strings.TrimSpace(tr.Detail + " body is gzip but not labelled Content-Encoding: gzip")
+			return tr
+		}
+	default:
+		tr.Detail = strings.TrimSpace(tr.Detail + " unsupported encoding " + f.encoding)
 		return tr
 	}
 	tr.MVTSHA256 = sum(raw)
+	tr.MVTBytesIdentical = tr.MVTSHA256 == t.MVTSHA256
+	var problems []string
 	feats, err := mvt.Decode(raw)
 	if err != nil {
 		tr.Detail = strings.TrimSpace(tr.Detail + " " + err.Error())
@@ -287,11 +320,19 @@ func (s *pmtilesSource) fetch(_ context.Context, z uint8, x, y uint32) (fetched,
 	if !loc.Found {
 		return fetched{detail: detail}, nil
 	}
+	enc := "gzip"
+	switch s.a.Header.TileCompression {
+	case pmtiles.CompressionGzip:
+	case pmtiles.CompressionNone:
+		enc = "identity"
+	default:
+		return fetched{}, fmt.Errorf("%s: unsupported tile compression %s", detail, s.a.Header.TileCompression)
+	}
 	b, err := s.a.ReadTile(loc)
 	if err != nil {
 		return fetched{}, err
 	}
-	return fetched{data: b, detail: fmt.Sprintf("%s offset=%d length=%d", detail, loc.Offset, loc.Length)}, nil
+	return fetched{data: b, encoding: enc, detail: fmt.Sprintf("%s offset=%d length=%d", detail, loc.Offset, loc.Length)}, nil
 }
 
 // lookupMatches checks the directory walk against the manifest lookup.
@@ -464,12 +505,17 @@ func (s *xyzSource) fetch(ctx context.Context, z uint8, x, y uint32) (fetched, e
 	if ct != "application/vnd.mapbox-vector-tile" && ct != "application/x-protobuf" {
 		return fetched{}, fmt.Errorf("%s: tile content type", detail)
 	}
-	// The stored bytes are gzip; a server that answers Accept-Encoding: gzip
-	// must label them so.
-	if ce != "gzip" {
-		return fetched{}, fmt.Errorf("%s: want Content-Encoding gzip", detail)
+	// Accept-Encoding: gzip permits either a gzip or an identity response
+	// (RFC 9110 12.5.3); anything else was not asked for.
+	enc := strings.ToLower(strings.TrimSpace(ce))
+	switch enc {
+	case "gzip":
+	case "", "identity":
+		enc = "identity"
+	default:
+		return fetched{}, fmt.Errorf("%s: Content-Encoding not requested", detail)
 	}
-	return fetched{data: body, detail: detail}, nil
+	return fetched{data: body, encoding: enc, detail: detail}, nil
 }
 
 // XYZ fetches the TileJSON at tileJSONURL and checks every corpus tile

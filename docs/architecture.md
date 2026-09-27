@@ -25,7 +25,7 @@ cmd/pmtiles-lab ──> internal/fixtures  ──> internal/pmtiles
 | `internal/mvt` | MVT bytes | decoded features | bounded MVT 2.1 decoding for comparison | encoding, validation of geometry |
 | `internal/mbtiles` | MBTiles path | `Metadata`, tile bytes by XYZ | read-only SQLite access, pbf/`vector_layers` requirement, XYZ -> TMS row | writing, other formats |
 | `internal/xyz` | open `mbtiles.File` | TileJSON, tile responses | routes, content type, gzip negotiation, 404/400 | PMTiles, faults |
-| `internal/tilecheck` | PMTiles `io.ReaderAt` or TileJSON URL, `MVTCorpus` | `Report` (`pmtiles-lab-tilecheck/1`) | fetching the corpus through one path and comparing decoded features | serving, generation |
+| `internal/tilecheck` | PMTiles `io.ReaderAt` or TileJSON URL, `MVTCorpus` | `Report` (`pmtiles-lab-tilecheck/1`) | fetching the corpus through one path and comparing decoded features (byte equality reported, not required) | serving, generation |
 | `cmd/pmtiles-lab` | argv | stdout/stderr, exit code | flags, human and JSON rendering | logic beyond wiring |
 
 ## Request path through the server

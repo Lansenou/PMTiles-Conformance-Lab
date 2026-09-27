@@ -2,6 +2,7 @@ package tilecheck
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -171,10 +172,10 @@ func TestDetectsMissingYFlip(t *testing.T) {
 	}
 }
 
-func TestXYZProtocolChecks(t *testing.T) {
-	e := setup(t)
-	// No Content-Encoding on a gzip body, and a relative tile URL.
-	strip := func(h http.Handler) http.Handler {
+// rewrite passes tile responses (not the TileJSON) through fn, which may
+// change the body and headers.
+func rewrite(fn func(body []byte, h http.Header) []byte) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == xyz.TileJSONPath {
 				h.ServeHTTP(w, r)
@@ -185,15 +186,98 @@ func TestXYZProtocolChecks(t *testing.T) {
 			for k, v := range rec.Header() {
 				w.Header()[k] = v
 			}
-			w.Header().Del("Content-Encoding")
+			body := rec.Body.Bytes()
+			if rec.Code == http.StatusOK {
+				body = fn(body, w.Header())
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			}
 			w.WriteHeader(rec.Code)
-			w.Write(rec.Body.Bytes())
+			w.Write(body)
 		})
 	}
+}
+
+// Servers that deliver the same tiles with different bytes pass: one that
+// re-compresses with another gzip level, and one that answers
+// Accept-Encoding: gzip with an identity response. Byte equality is reported
+// separately.
+func TestEquivalentEncodingsPass(t *testing.T) {
+	e := setup(t)
+	regzip := rewrite(func(body []byte, h http.Header) []byte {
+		raw, err := gunzip(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		zw.Write(raw)
+		zw.Close()
+		return buf.Bytes()
+	})
+	identity := rewrite(func(body []byte, h http.Header) []byte {
+		raw, err := gunzip(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Del("Content-Encoding")
+		return raw
+	})
+	for _, c := range []struct {
+		name     string
+		wrap     func(http.Handler) http.Handler
+		encoding string
+		stored   int
+	}{
+		{"unchanged", nil, "gzip", 7},
+		{"regzip", regzip, "gzip", 0},
+		{"identity", identity, "identity", 0},
+	} {
+		ts := xyzServer(t, e.mbtiles, c.wrap)
+		rep := XYZ(context.Background(), client, ts.URL+xyz.TileJSONPath, e.corpus)
+		mustPass(t, rep)
+		if rep.Summary.TilesStoredBytesIdentical != c.stored || rep.Summary.TilesMVTBytesIdentical != 7 {
+			t.Errorf("%s: summary %+v", c.name, rep.Summary)
+		}
+		for _, tr := range rep.Tiles {
+			if tr.Observed == "present" && tr.Encoding != c.encoding {
+				t.Errorf("%s: %d/%d/%d encoding %q", c.name, tr.Z, tr.X, tr.Y, tr.Encoding)
+			}
+		}
+	}
+}
+
+func TestXYZProtocolChecks(t *testing.T) {
+	e := setup(t)
+	// A gzip body without Content-Encoding.
+	strip := rewrite(func(body []byte, h http.Header) []byte {
+		h.Del("Content-Encoding")
+		return body
+	})
 	ts := xyzServer(t, e.mbtiles, strip)
 	rep := XYZ(context.Background(), client, ts.URL+xyz.TileJSONPath, e.corpus)
-	if rep.Result != "fail" || rep.Summary.TilesMatched != 3 || !strings.Contains(rep.Tiles[0].Detail, "Content-Encoding gzip") {
+	if rep.Result != "fail" || rep.Summary.TilesMatched != 3 || !strings.Contains(rep.Tiles[0].Detail, "not labelled Content-Encoding: gzip") {
 		t.Errorf("missing Content-Encoding: %s %d %q", rep.Result, rep.Summary.TilesMatched, rep.Tiles[0].Detail)
+	}
+	// An encoding that was not requested.
+	br := rewrite(func(body []byte, h http.Header) []byte {
+		h.Set("Content-Encoding", "br")
+		return body
+	})
+	ts = xyzServer(t, e.mbtiles, br)
+	rep = XYZ(context.Background(), client, ts.URL+xyz.TileJSONPath, e.corpus)
+	if rep.Result != "fail" || rep.Summary.TilesMatched != 3 || !strings.Contains(rep.Tiles[0].Detail, "Content-Encoding not requested") {
+		t.Errorf("unrequested Content-Encoding: %s %d %q", rep.Result, rep.Summary.TilesMatched, rep.Tiles[0].Detail)
+	}
+	// Equivalent bytes still fail when the decoded features differ.
+	wrong := rewrite(func(body []byte, h http.Header) []byte {
+		raw, _ := gunzip(body)
+		h.Del("Content-Encoding")
+		return bytes.Replace(raw, []byte("Alpha"), []byte("Alphx"), 1)
+	})
+	ts = xyzServer(t, e.mbtiles, wrong)
+	rep = XYZ(context.Background(), client, ts.URL+xyz.TileJSONPath, e.corpus)
+	if rep.Result != "fail" || rep.Tiles[0].Match || !strings.Contains(rep.Tiles[0].Detail, "decoded features differ") {
+		t.Errorf("changed feature: %s %+v", rep.Result, rep.Tiles[0])
 	}
 	rel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"tilejson":"3.0.0","tiles":["/{z}/{x}/{y}.pbf"],"vector_layers":[]}`))
