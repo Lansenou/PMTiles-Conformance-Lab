@@ -82,6 +82,7 @@ Valid (tile type PNG, tile compression none):
 | `root-none` | none | root-only; contiguous offsets; dedup (backward offset); run length 3; absent IDs; z0-z2 |
 | `root-gzip` | gzip | same entries as `root-none` |
 | `leaves-gzip` | gzip | root has only leaf entries; two leaf directories; z0-z3 plus spec example z12/3423/1763 (TileID 19078479); absent IDs |
+| `exact-8192` (added in 0.3.0) | gzip | exactly 8192 bytes, no padding: the 16 KiB opening request is answered with the whole archive (`206`, `bytes 0-8191/8192`); root-only; dedup; absent IDs; z0-z1 |
 
 Malformed / unsupported (one defect each, expected code in manifest): `bad-magic` (bad_magic), `bad-version` (unsupported_version), `truncated-header` (truncated_header), `truncated-file` (section_out_of_bounds), `truncated-directory` (truncated_directory), `varint-overflow` (varint_overflow), `section-overflow` (section_out_of_bounds), `root-beyond-16k` (root_directory_too_far), `empty-directory` (empty_directory), `too-many-entries` (too_many_entries), `zero-length-entry` (zero_length_entry), `entry-out-of-bounds` (entry_out_of_bounds), `leaf-cycle` (directory_depth_exceeded), `decompression-bomb` (decompressed_size_limit), `unknown-compression` (unknown_compression), `invalid-metadata` (invalid_metadata), `unsupported-zstd` (kind unsupported, unsupported_compression).
 
@@ -114,7 +115,7 @@ Trace entry fields: `seq, scenario, method, path, range, if_match, if_none_match
 
 ## 10. Scenarios (stable names)
 
-Each fault changes one behaviour relative to `normal`. "HTTP validity" says whether the server response itself is permitted by RFC 9110 / Fetch.
+Each fault changes one behaviour relative to `normal`, except `ignore-range-no-length`, which is a framing variant of `ignore-range` (§14 item 11). "HTTP validity" says whether the server response itself is permitted by RFC 9110 / Fetch.
 
 | Name | Change | HTTP validity | Robust client should |
 |---|---|---|---|
@@ -126,6 +127,7 @@ Each fault changes one behaviour relative to `normal`. "HTTP validity" says whet
 | `expanded-range` | 206 covering 16 more bytes than requested, accurate `Content-Range` | valid but unusual | use `Content-Range` or reject; never misalign |
 | `short-range` (added in review) | 206 omitting the last requested byte, accurate `Content-Range` | valid (RFC 9110 §15.3.7 subset) | request the remainder |
 | `ignore-range` | full 200 body for Range requests | valid (server may ignore Range) | slice correctly or reject explicitly |
+| `ignore-range-no-length` (added in 0.3.0) | framing variant of `ignore-range`: the 200 has no `Content-Length` and is chunked (close-delimited for HTTP/1.0) | valid (RFC 9112 §6.1, §6.3) | as `ignore-range`; do not require `Content-Length` |
 | `always-416` | 416 `bytes */size` for every Range request | invalid for satisfiable ranges | stop with an error, bounded retries |
 | `etag-change` | ETag changes after the first traced request; body unchanged | valid per request, inconsistent across requests | detect change, refetch or fail |
 | `slow-headers` | response headers delayed by `--delay` (default 2 s, max 10 s) | valid | honour its own timeout/cancel |
@@ -178,3 +180,4 @@ Recorded during integration; each is reflected in code, tests and docs.
 8. Trace request fields are clipped to 1024 bytes; `TraceLimit` is capped at 65536.
 9. Evidence locations: `docs/oracle.md`, `docs/scenarios.md`, `docs/conformance.md`, `docs/results/`.
 10. Independent review fixes: `Limits.MaxDirReadTotal` (64 MiB of compressed directory bytes per archive, charged before each read; new code `directory_budget_exceeded`). `serve --dir` checks the 64 MiB total from file sizes before loading. The probe requests the remainder after a short 206, and attributes a structural error to a suspicious first 200. New scenario `short-range` (conforming subset 206).
+11. Generator 0.3.0 adds two HTTP boundary cases; every existing archive, hash, schema identifier and scenario name is unchanged. The valid archive `exact-8192` is exactly 8192 bytes, so the 16 KiB opening request gets a clamped `206` covering the whole file. The scenario `ignore-range-no-length` is a framing variant of `ignore-range` (no `Content-Length`, chunked). It is the one scenario that is not a single change from `normal`; `TestFramingVariant` pins its difference from `ignore-range` to `Content-Length` and framing.

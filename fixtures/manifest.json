@@ -2,7 +2,7 @@
   "schema": "pmtiles-lab-manifest/1",
   "generator": {
     "name": "pmtiles-lab",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "spec": {
     "repository": "https://github.com/protomaps/PMTiles",
@@ -760,6 +760,91 @@
             "archive_offset": 392,
             "length": 65
           }
+        }
+      ]
+    },
+    {
+      "name": "exact-8192",
+      "file": "valid/exact-8192.pmtiles",
+      "kind": "valid",
+      "sha256": "f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794",
+      "size": 8192,
+      "description": "Exactly 8192 bytes, root directory only, gzip internal compression. The file ends with the last tile byte (no padding), so the 16 KiB opening request bytes=0-16383 is answered with the whole archive, tile data included (Content-Range: bytes 0-8191/8192).",
+      "header": {
+        "internal_compression": "gzip",
+        "tile_compression": "none",
+        "tile_type": "png",
+        "clustered": true,
+        "min_zoom": 0,
+        "max_zoom": 1
+      },
+      "features": [
+        "root-only",
+        "internal-gzip",
+        "deduplicated-content",
+        "absent-tiles",
+        "multi-zoom",
+        "exact-size-8192",
+        "whole-archive-in-first-16k"
+      ],
+      "tiles": [
+        {
+          "z": 0,
+          "x": 0,
+          "y": 0,
+          "tile_id": 0,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 344
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 0,
+          "tile_id": 1,
+          "status": "present",
+          "content": "green",
+          "sha256": "e57ca5debbbbddad3416ab0c3aa5e50adf35138f4c7c6ce55a3866ffb5a2baac",
+          "length": 120,
+          "archive_offset": 464
+        },
+        {
+          "z": 1,
+          "x": 0,
+          "y": 1,
+          "tile_id": 2,
+          "status": "present",
+          "content": "teal",
+          "sha256": "b8aef401cc84551a9f56cd8ec3e187c16a8f63e0d37b8ead92609659f8ae2586",
+          "length": 7608,
+          "archive_offset": 584
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 1,
+          "tile_id": 3,
+          "status": "absent"
+        },
+        {
+          "z": 1,
+          "x": 1,
+          "y": 0,
+          "tile_id": 4,
+          "status": "present",
+          "content": "red",
+          "sha256": "b0d8272b952ddd0261bd122ae96d860f4c807563cf247d54f9aa85eef9b23638",
+          "length": 120,
+          "archive_offset": 344
+        },
+        {
+          "z": 2,
+          "x": 0,
+          "y": 0,
+          "tile_id": 5,
+          "status": "absent"
         }
       ]
     },

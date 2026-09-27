@@ -72,6 +72,12 @@ func All() []rangeserver.Scenario {
 			Mutate:      ignoreRange,
 		},
 		{
+			Name: "ignore-range-no-length", Validity: Valid,
+			Description: "Framing variant of ignore-range: every 200 answer to a GET with a Range header carries the full representation " +
+				"with no Content-Length, framed with Transfer-Encoding: chunked.",
+			Mutate: ignoreRangeNoLength,
+		},
+		{
 			Name: "always-416", Validity: Invalid,
 			Description: "416 with Content-Range bytes */size for every GET with a Range header, even satisfiable ones.",
 			Mutate:      always416,
@@ -224,6 +230,20 @@ func ignoreRange(x *rangeserver.Exchange) {
 	q := x.Req
 	q.Range, q.IfRange = "", ""
 	*x.Resp = *rangeserver.Plan(q, x.File, x.ETag)
+}
+
+// ignoreRangeNoLength is ignore-range with one framing change: the 200 is
+// sent without Content-Length and with Transfer-Encoding: chunked (RFC 9112
+// §6.1, §7.1), so the length is known only when the body ends. The header is
+// set explicitly so that net/http never computes a Content-Length itself,
+// whatever the body size and flush timing.
+func ignoreRangeNoLength(x *rangeserver.Exchange) {
+	ignoreRange(x)
+	if !rangeHandled(x) || x.Resp.Status != http.StatusOK {
+		return
+	}
+	x.Resp.Header.Del("Content-Length")
+	x.Resp.Header.Set("Transfer-Encoding", "chunked")
 }
 
 func always416(x *rangeserver.Exchange) {

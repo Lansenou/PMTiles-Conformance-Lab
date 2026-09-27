@@ -37,15 +37,16 @@ var golden = map[string]string{
 	"malformed/unknown-compression.pmtiles": "60201d23478c1d0ecc0e17db858c7299422142dcbe45b81e9511b740b539df2d",
 	"malformed/varint-overflow.pmtiles":     "e15630c44d19f297a1d93973b0a08190d3f5c624ac43f651a77e0870456a7f5b",
 	"malformed/zero-length-entry.pmtiles":   "e7c4f0250ea5cabb4c401fcb268ddabce93c0baaf6571d48548fcca4c4a019e8",
-	"SHA256SUMS":                            "31c3ed45feaf7f93ec0fd54b092469f9a675c44eabebf9e73893decfc965c217",
-	"manifest.json":                         "dc6f787e3a995ee4b800bfc3da0d25a034adb8db52550042965cc5b022cdf32f",
+	"SHA256SUMS":                            "acfe22d138d58cb30c26096c15cbecc8a5e1e7145d70e7f58a6f73ce46e533f5",
+	"manifest.json":                         "c0dc38b15d8169e5b4666dd9d365e55a5eb8e6984e06e2731b9a0a033c6a9239",
 	"unsupported/unsupported-zstd.pmtiles":  "452fbe37d1abb699ea97d8cbd81dc3d3fe4e6ad795b39d2f56c5e5126fc73be2",
+	"valid/exact-8192.pmtiles":              "f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794",
 	"valid/leaves-gzip.pmtiles":             "b5a327ce9a6762385a695e1e5bec4a83bfa3b559780403feb3c0a2fb72cea5ce",
 	"valid/root-gzip.pmtiles":               "af78eba8c9d563c7cb7143fb39ce429b857fd6ce25afc606eacbc13ec53dbb10",
 	"valid/root-none.pmtiles":               "48dcf08698d50dd65fda79f3a461f04e3c7235842ee96b25118250ee75eb3681",
 }
 
-const goldenVersion = "0.2.0"
+const goldenVersion = "0.3.0"
 
 func TestGolden(t *testing.T) {
 	if Version != goldenVersion {
@@ -111,6 +112,29 @@ func TestRootNoneSize(t *testing.T) {
 	}
 }
 
+// exact-8192 is exactly ExactSize bytes and made only of its sections: the
+// header, root directory, metadata and tile data are contiguous, there are no
+// leaves, and the file ends with the last tile byte.
+func TestExact8192Layout(t *testing.T) {
+	var s spec
+	for _, v := range validSpecs() {
+		if v.name == "exact-8192" {
+			s = v
+		}
+	}
+	b := build(s)
+	h := b.header
+	if len(b.bytes) != ExactSize || h.TileDataOffset+h.TileDataLength != ExactSize || h.LeafLength != 0 ||
+		h.RootOffset != pmtiles.HeaderLen || h.MetadataOffset != h.RootOffset+h.RootLength ||
+		h.TileDataOffset != h.MetadataOffset+h.MetadataLength || uint64(len(b.data)) != h.TileDataLength {
+		t.Fatalf("%d bytes, header %+v", len(b.bytes), h)
+	}
+	img, err := png.Decode(bytes.NewReader(contents["teal"]))
+	if err != nil || len(contents["teal"]) != 7608 || img.Bounds().Dx() != 48 || img.Bounds().Dy() != 52 {
+		t.Fatalf("teal: %d bytes, %v", len(contents["teal"]), err)
+	}
+}
+
 func TestManifestShape(t *testing.T) {
 	files, m, err := Generate()
 	if err != nil {
@@ -159,8 +183,8 @@ func TestManifestShape(t *testing.T) {
 			t.Errorf("%s: kind %s", a.Name, a.Kind)
 		}
 	}
-	if len(m.Archives) != 20 {
-		t.Errorf("%d archives, want 3 valid + 16 malformed + 1 unsupported", len(m.Archives))
+	if len(m.Archives) != 21 {
+		t.Errorf("%d archives, want 4 valid + 16 malformed + 1 unsupported", len(m.Archives))
 	}
 }
 

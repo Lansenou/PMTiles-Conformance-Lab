@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,7 @@ type obs struct {
 	body    []byte
 	err     error // error reading the body
 	elapsed time.Duration
+	framing string // Transfer-Encoding as parsed by the client, e.g. "chunked"
 }
 
 func (l *lab) do(ctx context.Context, t *testing.T, method, sc string, h http.Header) (obs, error) {
@@ -98,7 +100,8 @@ func (l *lab) do(ctx context.Context, t *testing.T, method, sc string, h http.He
 	defer resp.Body.Close()
 	body, rerr := io.ReadAll(resp.Body)
 	resp.Header.Del("Date")
-	return obs{status: resp.StatusCode, header: resp.Header, body: body, err: rerr, elapsed: time.Since(start)}, nil
+	return obs{status: resp.StatusCode, header: resp.Header, body: body, err: rerr, elapsed: time.Since(start),
+		framing: strings.Join(resp.TransferEncoding, ",")}, nil
 }
 
 func (l *lab) waitTrace(t *testing.T, n int) rangeserver.Trace {
@@ -118,7 +121,7 @@ func (l *lab) waitTrace(t *testing.T, n int) rangeserver.Trace {
 
 var documented = []string{
 	"normal", "wrong-content-range", "status-200-partial-body", "truncated-body", "overlong-body",
-	"expanded-range", "short-range", "ignore-range", "always-416", "etag-change", "slow-headers", "stall-body",
+	"expanded-range", "short-range", "ignore-range", "ignore-range-no-length", "always-416", "etag-change", "slow-headers", "stall-body",
 	"cors-missing", "cors-wrong-origin", "cors-no-expose",
 }
 
@@ -149,7 +152,7 @@ func TestNamesAndValidity(t *testing.T) {
 		"normal": Valid, "wrong-content-range": Invalid, "status-200-partial-body": Invalid,
 		"truncated-body": Invalid, "overlong-body": Invalid, "expanded-range": ValidUnusual,
 		"short-range":  Valid,
-		"ignore-range": Valid, "always-416": Invalid, "etag-change": ValidUnusual, "slow-headers": Valid,
+		"ignore-range": Valid, "ignore-range-no-length": Valid, "always-416": Invalid, "etag-change": ValidUnusual, "slow-headers": Valid,
 		"stall-body": Invalid, "cors-missing": ValidBlocksJS, "cors-wrong-origin": ValidBlocksJS, "cors-no-expose": Valid,
 	}
 	for _, s := range all {
@@ -209,6 +212,7 @@ func TestScenariosExact(t *testing.T) {
 		terr     string      // trace error
 		path     string      // defaults to the scenario URL
 		extra    http.Header // extra request headers
+		framing  string      // Transfer-Encoding as parsed by the client
 	}
 	tests := []tc{
 		{sc: "normal", method: "GET", rng: "bytes=100-199", status: 206, header: part(100, 199, 1000), body: data[100:200], complete: true},
@@ -234,6 +238,12 @@ func TestScenariosExact(t *testing.T) {
 		{sc: "ignore-range", method: "GET", rng: "bytes=100-199", status: 200, header: full, body: data, complete: true},
 		{sc: "ignore-range", method: "GET", rng: "bytes=5000-", status: 200, header: full, body: data, complete: true},
 		{sc: "ignore-range", method: "GET", rng: "bytes=100-199", extra: hdr("If-None-Match", etag), status: 304, header: get(), complete: true},
+		{sc: "ignore-range-no-length", method: "GET", rng: "bytes=100-199", status: 200, header: get("Content-Type", ct), body: data, framing: "chunked", complete: true},
+		{sc: "ignore-range-no-length", method: "GET", rng: "bytes=5000-", status: 200, header: get("Content-Type", ct), body: data, framing: "chunked", complete: true},
+		{sc: "ignore-range-no-length", method: "GET", rng: "bytes=abc", status: 200, header: get("Content-Type", ct), body: data, framing: "chunked", complete: true},
+		{sc: "ignore-range-no-length", method: "GET", status: 200, header: full, body: data, complete: true},
+		{sc: "ignore-range-no-length", method: "HEAD", rng: "bytes=100-199", status: 200, header: full, complete: true},
+		{sc: "ignore-range-no-length", method: "GET", rng: "bytes=100-199", extra: hdr("If-None-Match", etag), status: 304, header: get(), complete: true},
 		{sc: "always-416", method: "GET", rng: "bytes=100-199", status: 416, header: get("Content-Range", "bytes */1000", "Content-Length", "0"), complete: true},
 		{sc: "always-416", method: "GET", rng: "bytes=abc", status: 416, header: get("Content-Range", "bytes */1000", "Content-Length", "0"), complete: true},
 		{sc: "always-416", method: "GET", rng: "bytes=0-1,4-5", status: 416, header: get("Content-Range", "bytes */1000", "Content-Length", "0"), complete: true},
@@ -283,6 +293,9 @@ func TestScenariosExact(t *testing.T) {
 			}
 			if !reflect.DeepEqual(resp.Header, c.header) {
 				t.Errorf("header\n got %v\nwant %v", resp.Header, c.header)
+			}
+			if te := strings.Join(resp.TransferEncoding, ","); te != c.framing {
+				t.Errorf("Transfer-Encoding %q, want %q", te, c.framing)
 			}
 			if len(body) != len(c.body) || sum(body) != sum(c.body) {
 				t.Errorf("body %d bytes, want %d", len(body), len(c.body))
@@ -477,6 +490,7 @@ func TestOneChangeAtATime(t *testing.T) {
 		st   = "status"
 		body = "body"
 		rerr = "read-error"
+		frm  = "framing"
 		slow = "slow"
 		cr   = "Content-Range"
 		cl   = "Content-Length"
@@ -513,7 +527,10 @@ func TestOneChangeAtATime(t *testing.T) {
 		"expanded-range":          {"range": {cl, cr, body}},
 		"short-range":             {"range": {cl, cr, body}},
 		"ignore-range":            {"range": {st, cl, cr, body}},
-		"always-416":              {"range": {st, cl, cr, ctyp, body}, "invalid": {st, cl, cr, ctyp, body}},
+		// The framing variant of ignore-range; TestFramingVariant compares
+		// the two directly.
+		"ignore-range-no-length": {"range": {st, cl, cr, body, frm}, "invalid": {cl, frm}},
+		"always-416":             {"range": {st, cl, cr, ctyp, body}, "invalid": {st, cl, cr, ctyp, body}},
 		"etag-change": merge(each([]string{"get", "range", "head", "invalid"}, et),
 			map[string][]string{"inm": {st, cl, cr, ctyp, et, body}}),
 		"slow-headers":      each(get, slow),
@@ -581,11 +598,50 @@ func diff(a, b obs, slow time.Duration) []string {
 	if (a.err == nil) != (b.err == nil) {
 		d = append(d, "read-error")
 	}
+	if a.framing != b.framing {
+		d = append(d, "framing")
+	}
 	if (a.elapsed >= slow) != (b.elapsed >= slow) {
 		d = append(d, "slow")
 	}
 	sort.Strings(d)
 	return d
+}
+
+// TestFramingVariant: ignore-range-no-length differs from ignore-range only
+// in how a Range GET's 200 is framed (no Content-Length, chunked), and in
+// nothing else for any request.
+func TestFramingVariant(t *testing.T) {
+	l := newLab(t, 0)
+	ctx := context.Background()
+	for _, r := range []struct {
+		method string
+		h      http.Header
+		want   []string
+	}{
+		{"GET", nil, nil},
+		{"GET", hdr("Range", "bytes=100-199"), []string{"Content-Length", "framing"}},
+		{"GET", hdr("Range", "bytes=5000-"), []string{"Content-Length", "framing"}},
+		{"GET", hdr("Range", "bytes=abc"), []string{"Content-Length", "framing"}},
+		{"GET", hdr("Range", "bytes=0-1,4-5"), []string{"Content-Length", "framing"}},
+		{"HEAD", hdr("Range", "bytes=100-199"), nil},
+		{"OPTIONS", hdr("Access-Control-Request-Method", "GET"), nil},
+		{"GET", hdr("Range", "bytes=100-199", "If-None-Match", l.file.ETag), nil},
+		{"GET", hdr("Range", "bytes=100-199", "If-Match", `"other"`), nil},
+		{"GET", hdr("Range", "bytes=100-199", "If-Range", `"other"`), []string{"Content-Length", "framing"}},
+	} {
+		base, err := l.do(ctx, t, r.method, "ignore-range", r.h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := l.do(ctx, t, r.method, "ignore-range-no-length", r.h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := diff(base, v, time.Hour); !reflect.DeepEqual(got, r.want) && !(len(got) == 0 && len(r.want) == 0) {
+			t.Errorf("%s %v: differs in %q, want %q", r.method, r.h, got, r.want)
+		}
+	}
 }
 
 func TestChangedETag(t *testing.T) {

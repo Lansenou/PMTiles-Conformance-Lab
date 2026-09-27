@@ -1,0 +1,113 @@
+
+### go-pmtiles build (go version -m)
+go-pmtiles: go1.26.8
+	path	github.com/protomaps/go-pmtiles
+	mod	github.com/protomaps/go-pmtiles	v1.31.2	h1:xYXagv2oKJarheCdOIGg8MvYRp8Y03MBs9jegxf4NDQ=
+
+### file
+size: 8192 bytes
+sha256: f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794
+
+### 1. go-pmtiles verify (local file)
+$ go-pmtiles verify fixtures/valid/exact-8192.pmtiles
+verify.go:169: Completed verify in 65.529µs.
+exit code: 0
+
+### 2. go-pmtiles show (local file)
+$ go-pmtiles show fixtures/valid/exact-8192.pmtiles
+pmtiles spec version: 3
+tile type: png
+bounds: (long: -180.000000, lat: -85.051129) (long: 180.000000, lat: 85.051129)
+min zoom: 0
+max zoom: 1
+center: (long: 0.000000, lat: 0.000000)
+center zoom: 0
+addressed tiles count: 4
+tile entries count: 4
+tile contents count: 3
+clustered: true
+internal compression: gzip
+tile compression: none
+description Synthetic pmtiles-lab fixture. Solid-colour PNG tiles; not map data.
+type overlay
+version 1.0.0
+name pmtiles-lab exact-8192
+exit code: 0
+
+### 3. pmtiles-lab inspect (local file)
+$ pmtiles-lab inspect fixtures/valid/exact-8192.pmtiles --tile 1/0/1
+file:   fixtures/valid/exact-8192.pmtiles (8192 bytes, sha256 f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794)
+header: v3 internal=gzip tile=none type=png clustered=true zoom=0-1
+        root [127,+41) metadata [168,+176) leaves [344,+0) data [344,+7848)
+dirs:   1 (0 leaf, depth 1), 4 tile entries, 4 addressed tiles
+tile:   1/0/1 id=2 present [584,+7608) sha256 b8aef401cc84551a9f56cd8ec3e187c16a8f63e0d37b8ead92609659f8ae2586
+result: valid
+exit code: 0
+
+### 4. tile lookup: every manifest coordinate, sha256 of stdout vs manifest
+0/0/0 present go-file: exit 0, 120 bytes, match
+0/0/0 present go-http: exit 0, 120 bytes, match
+0/0/0 present rs-http: exit 0, 120 bytes, match
+1/0/0 present go-file: exit 0, 120 bytes, match
+1/0/0 present go-http: exit 0, 120 bytes, match
+1/0/0 present rs-http: exit 0, 120 bytes, match
+1/0/1 present go-file: exit 0, 7608 bytes, match
+1/0/1 present go-http: exit 0, 7608 bytes, match
+1/0/1 present rs-http: exit 0, 7608 bytes, match
+1/1/1 absent go-file: exit 0, 0 bytes, absent (0 bytes)
+1/1/1 absent go-http: exit 0, 0 bytes, absent (0 bytes)
+1/1/1 absent rs-http: exit 0, 0 bytes, absent (0 bytes)
+1/1/0 present go-file: exit 0, 120 bytes, match
+1/1/0 present go-http: exit 0, 120 bytes, match
+1/1/0 present rs-http: exit 0, 120 bytes, match
+2/0/0 absent go-file: exit 0, 0 bytes, absent (0 bytes)
+2/0/0 absent go-http: exit 0, 0 bytes, absent (0 bytes)
+2/0/0 absent rs-http: exit 0, 0 bytes, absent (0 bytes)
+
+### 5. raw answer to the 16 KiB opening request (normal scenario)
+$ curl -s -D - -o body -H 'Range: bytes=0-16383' http://127.0.0.1:18433/valid/exact-8192.pmtiles
+HTTP/1.1 206 Partial Content
+Accept-Ranges: bytes
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: ETag, Content-Range, Accept-Ranges
+Cache-Control: no-store
+Content-Length: 8192
+Content-Range: bytes 0-8191/8192
+Content-Type: application/vnd.pmtiles
+Etag: "sha256-f35ec20aaa79146e"
+
+body: 8192 bytes, sha256 f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794
+lab trace:
+{
+  "limit": 1024,
+  "dropped": 0,
+  "entries": [
+    {
+      "seq": 1,
+      "scenario": "normal",
+      "method": "GET",
+      "path": "/valid/exact-8192.pmtiles",
+      "range": "bytes=0-16383",
+      "status": 206,
+      "content_range": "bytes 0-8191/8192",
+      "content_length": "8192",
+      "etag": "\"sha256-f35ec20aaa79146e\"",
+      "bytes_sent": 8192,
+      "body_sha256": "f35ec20aaa79146e0216bb9bf6914f6e7862995fde00592ed20182c001e4e794",
+      "complete": true
+    }
+  ]
+}
+
+
+### 6. what each reader requested for one present tile (1/0/1)
+go-pmtiles: exit 0
+{"method":"GET","range":"bytes=0-16383","status":206,"content_range":"bytes 0-8191/8192","bytes_sent":8192}
+{"method":"GET","range":"bytes=127-167","status":206,"content_range":"bytes 127-167/8192","bytes_sent":41}
+{"method":"GET","range":"bytes=584-8191","status":206,"content_range":"bytes 584-8191/8192","bytes_sent":7608}
+pmtiles-rs: exit 0
+{"method":"GET","range":"bytes=0-16383","status":206,"content_range":"bytes 0-8191/8192","bytes_sent":8192}
+{"method":"GET","range":"bytes=584-8191","status":206,"content_range":"bytes 584-8191/8192","bytes_sent":7608}
+
+### result
+PASS
