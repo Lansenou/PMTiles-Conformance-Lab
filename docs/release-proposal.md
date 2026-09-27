@@ -6,7 +6,7 @@ Implemented in `.github/workflows/ci.yml` (job `release`). This replaces the ear
 
 * Trigger: a `push` to `main` (in practice, merging a pull request). Pull requests never publish: the `release` job is skipped unless `github.event_name == 'push'` and `github.ref == 'refs/heads/main'`, and only that job has `contents: write`.
 * Gates: `release` needs the `check` (Linux), `windows` and `macos` jobs of the same workflow run, so it runs only after all three passed for that exact commit.
-* Concurrency: pull request runs cancel superseded runs of the same ref; runs for pushes to `main` are never cancelled (`cancel-in-progress` is true only for `pull_request`), so a push waiting for its release is not dropped by a later push.
+* Concurrency: pull request runs cancel superseded runs of the same ref. Each push to `main` runs in its own concurrency group (keyed by the run id), so a later push cancels neither a running nor a pending `main` run. A shared group would not be enough: GitHub cancels a pending run in a group when a newer one queues, even with `cancel-in-progress: false`.
 
 ## Version rule
 
@@ -38,7 +38,7 @@ Built once by the `check` job and handed to `release` as a workflow artifact, so
 ## Idempotence and tags
 
 * An existing tag is never moved. If `v0.4.N` exists at a different commit, the job fails.
-* A rerun of the same workflow run has the same run number, so it targets the same tag. If the release already exists, the job re-uploads the same asset names (`--clobber`) and makes sure the release is published; otherwise it creates the release and its tag at `GITHUB_SHA`.
+* A rerun of the same workflow run has the same run number, so it targets the same tag. If the release already exists, the job never deletes or replaces an asset: every existing asset must have the SHA-256 of this run's file (otherwise the job fails), an asset name outside the 7 expected fails the job, only missing assets are uploaded, and a draft is published. A complete, published release is left untouched. Otherwise it creates the release and its tag at `GITHUB_SHA`.
 * Releases are created with `--latest=false` and then marked latest only if no higher `v0.4.x` release exists, because runs can finish out of order.
 * No third-party release actions: the job uses the preinstalled GitHub CLI with the workflow token. `actions/checkout`, `actions/setup-go`, `actions/upload-artifact` and `actions/download-artifact` are pinned by commit SHA.
 

@@ -8,10 +8,13 @@ on:
 permissions:
   contents: read
 
-# Superseded pull request runs are cancelled. Pushes to main are never
-# cancelled: each one may be waiting to publish its release.
+# Superseded pull request runs are cancelled. Each push to main gets its own
+# group (the run id), so no later push can cancel it, running or pending:
+# within one group GitHub cancels a pending run when a newer one queues, even
+# with cancel-in-progress false. Each main run may be waiting to publish its
+# release.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || format('ci-{0}-{1}', github.ref, github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -154,16 +157,45 @@ jobs:
           fi
           notes="Automatic release of $GITHUB_SHA after the Linux, Windows and macOS CI gates passed (run $GITHUB_RUN_ID). CLI version $tag; the fixture generator version is reported by 'pmtiles-lab version'. Verify downloads with: sha256sum --check SHA256SUMS"
           if gh release view "$tag" >/dev/null 2>&1; then
-            # A rerun: re-upload the same bytes and make sure it is published.
-            gh release upload "$tag" dist/* --clobber
-            gh release edit "$tag" --draft=false
-            echo "release $tag already existed; assets refreshed"
+            # A rerun. Published assets are never deleted or replaced: each
+            # existing asset must have the SHA-256 of this run's file, and
+            # only missing assets are uploaded. A complete, published
+            # release is left untouched.
+            existing=$(mktemp -d)
+            names=$(gh release view "$tag" --json assets --jq '.assets[].name')
+            if [ -n "$names" ]; then
+              gh release download "$tag" --dir "$existing"
+            fi
+            missing=()
+            for f in dist/*; do
+              name=$(basename "$f")
+              if [ -e "$existing/$name" ]; then
+                want=$(sha256sum < "$f" | cut -d' ' -f1)
+                have=$(sha256sum < "$existing/$name" | cut -d' ' -f1)
+                if [ "$want" != "$have" ]; then
+                  echo "$tag: asset $name has sha256 $have, this run built $want; refusing to replace it"; exit 1
+                fi
+              else
+                missing+=("$f")
+              fi
+            done
+            for name in $names; do
+              [ -e "dist/$name" ] || { echo "$tag: unexpected asset $name; refusing to continue"; exit 1; }
+            done
+            if [ ${#missing[@]} -gt 0 ]; then
+              echo "$tag: uploading missing assets: ${missing[*]}"
+              gh release upload "$tag" "${missing[@]}"
+            fi
+            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true ]; then
+              gh release edit "$tag" --draft=false
+            fi
+            echo "release $tag already existed; ${#missing[@]} missing asset(s) uploaded, existing assets verified"
           else
             gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "$tag" --notes "$notes" --latest=false
           fi
           # Mark as latest only if no higher v0.4.x release exists (runs can
-          # finish out of order).
-          highest=$(gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -E '^v0\.4\.[0-9]+$' | sort -t. -k3,3n | tail -1)
+          # finish out of order, and main runs can overlap).
+          highest=$(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName' | grep -E '^v0\.4\.[0-9]+$' | sort -t. -k3,3n | tail -1)
           if [ "$highest" = "$tag" ]; then
             gh release edit "$tag" --latest
           fi
