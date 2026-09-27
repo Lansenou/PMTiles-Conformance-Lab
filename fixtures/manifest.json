@@ -2,7 +2,7 @@
   "schema": "pmtiles-lab-manifest/1",
   "generator": {
     "name": "pmtiles-lab",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "spec": {
     "repository": "https://github.com/protomaps/PMTiles",
@@ -1001,5 +1001,340 @@
       "description": "root-none built with internal compression zstd (4): the root directory and metadata are zstd frames of raw (uncompressed) blocks. Valid PMTiles; pmtiles-lab does not decode zstd.",
       "expected_error": "unsupported_compression"
     }
-  ]
+  ],
+  "mvt_corpus": {
+    "name": "mvt-points",
+    "description": "One original MVT tileset, packaged as PMTiles v3 and MBTiles 1.3 with identical gzip tile bytes. Expected features come from the corpus source, not from either file.",
+    "content_rights": "Original synthetic data written for this repository (names are the ICAO spelling alphabet, positions are arbitrary tile coordinates). No map data or third-party content. MIT, see LICENSE.",
+    "generator_inputs": "internal/fixtures/mvtcorpus.go (tiles and features), mvt.go (MVT 2.1 encoder), sqlite.go (SQLite 3 file writer), encode.go (stored-block gzip). Go standard library only; no third-party code or data.",
+    "tile_format": "mvt",
+    "tile_compression": "gzip",
+    "extent": 4096,
+    "vector_layers": [
+      {
+        "id": "points",
+        "description": "Labelled points: name (string) and rank (unsigned integer).",
+        "fields": {
+          "name": "String",
+          "rank": "Number"
+        },
+        "minzoom": 0,
+        "maxzoom": 3
+      }
+    ],
+    "files": [
+      {
+        "format": "pmtiles",
+        "file": "mvt/points.pmtiles",
+        "sha256": "86323bf17d7eec9571e1d83e03e6c7b57571c0e55d8f2a940b5a35761095547f",
+        "size": 1227,
+        "description": "PMTiles v3, tile type mvt, tile compression gzip, internal compression gzip; root directory holds only leaf entries (3 leaves)."
+      },
+      {
+        "format": "mbtiles",
+        "file": "mvt/points.mbtiles",
+        "sha256": "05c1a66c8acaf3d5e17275d6e72f2f7b0689af191aac8d4de309e020030fdb01",
+        "size": 16384,
+        "description": "MBTiles 1.3 (SQLite 3, application_id 0x4d504258): metadata format pbf with a json vector_layers row; tiles with TMS tile_row; unique tile_index."
+      }
+    ],
+    "tiles": [
+      {
+        "z": 0,
+        "x": 0,
+        "y": 0,
+        "tms_row": 0,
+        "status": "present",
+        "purpose": "single z0 tile",
+        "sha256": "544e8957aefafa1ad6e24aa6514ba9a4df0d8708f036e43f5218308b24dc702c",
+        "length": 82,
+        "mvt_sha256": "9b35c2b6b078a61c04794d1e0024135772e7a56028bfe560a4eac3da96c06f03",
+        "features": [
+          {
+            "layer": "points",
+            "id": 1,
+            "type": "Point",
+            "coordinates": [
+              2048,
+              2048
+            ],
+            "properties": {
+              "name": "Alpha",
+              "rank": 1
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 0,
+          "archive_offset": 619,
+          "leaf_directory": {
+            "archive_offset": 517,
+            "length": 36
+          }
+        }
+      },
+      {
+        "z": 1,
+        "x": 0,
+        "y": 0,
+        "tms_row": 1,
+        "status": "present",
+        "purpose": "north-west z1 tile; its TMS mirror 1/0/1 is absent",
+        "sha256": "f9cf68b5fdb516654714f4a5b9aef56d0ea399a03c4778171c98a4ad5ddb2455",
+        "length": 82,
+        "mvt_sha256": "4656fc10c527b1d52cdb1779cc975fe52e1c7f61380c5c0fe768463ef3dffabe",
+        "features": [
+          {
+            "layer": "points",
+            "id": 2,
+            "type": "Point",
+            "coordinates": [
+              1024,
+              3072
+            ],
+            "properties": {
+              "name": "Bravo",
+              "rank": 2
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 1,
+          "archive_offset": 701,
+          "leaf_directory": {
+            "archive_offset": 517,
+            "length": 36
+          }
+        }
+      },
+      {
+        "z": 1,
+        "x": 0,
+        "y": 1,
+        "tms_row": 0,
+        "status": "absent",
+        "purpose": "absent; TMS mirror of present 1/0/0",
+        "pmtiles": {
+          "tile_id": 2,
+          "leaf_directory": {
+            "archive_offset": 517,
+            "length": 36
+          }
+        }
+      },
+      {
+        "z": 1,
+        "x": 1,
+        "y": 1,
+        "tms_row": 0,
+        "status": "present",
+        "purpose": "south-east z1 tile with two features",
+        "sha256": "a3837765326288a46603b4cbfb2e8f56b1a7fe16c465c6163f9f5eb154797296",
+        "length": 116,
+        "mvt_sha256": "4dd567e373f75bc4c1de2e73850f781f76c81c6c2cd0942cc4b610939d22dbe9",
+        "features": [
+          {
+            "layer": "points",
+            "id": 3,
+            "type": "Point",
+            "coordinates": [
+              512,
+              512
+            ],
+            "properties": {
+              "name": "Charlie",
+              "rank": 2
+            }
+          },
+          {
+            "layer": "points",
+            "id": 4,
+            "type": "Point",
+            "coordinates": [
+              3584,
+              3584
+            ],
+            "properties": {
+              "name": "Delta",
+              "rank": 3
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 3,
+          "archive_offset": 783,
+          "leaf_directory": {
+            "archive_offset": 517,
+            "length": 36
+          }
+        }
+      },
+      {
+        "z": 2,
+        "x": 1,
+        "y": 0,
+        "tms_row": 3,
+        "status": "present",
+        "purpose": "top row; its TMS mirror 2/1/3 is absent",
+        "sha256": "d55dbf9e47b6756633b9f8f1bfc976485a58bbc3461438b931075313bb0734ff",
+        "length": 81,
+        "mvt_sha256": "ef17f2208d403aa86690feb3ad8d0a96d82c10127400eaffe2e7196afa97012e",
+        "features": [
+          {
+            "layer": "points",
+            "id": 5,
+            "type": "Point",
+            "coordinates": [
+              256,
+              3840
+            ],
+            "properties": {
+              "name": "Echo",
+              "rank": 3
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 6,
+          "archive_offset": 899,
+          "leaf_directory": {
+            "archive_offset": 553,
+            "length": 37
+          }
+        }
+      },
+      {
+        "z": 2,
+        "x": 1,
+        "y": 3,
+        "tms_row": 0,
+        "status": "absent",
+        "purpose": "absent; TMS mirror of present 2/1/0",
+        "pmtiles": {
+          "tile_id": 11,
+          "leaf_directory": {
+            "archive_offset": 553,
+            "length": 37
+          }
+        }
+      },
+      {
+        "z": 2,
+        "x": 2,
+        "y": 2,
+        "tms_row": 1,
+        "status": "present",
+        "purpose": "TMS mirror of 2/2/1, different content",
+        "sha256": "dc08314452b94f56c5c869f20ca111c19b9d4785c65a808d3cd5b82a420d0a15",
+        "length": 81,
+        "mvt_sha256": "1c2ce5fdc49534d48e56ce85b679e9e15845df7037fcf7ef86b40a438029e5ae",
+        "features": [
+          {
+            "layer": "points",
+            "id": 7,
+            "type": "Point",
+            "coordinates": [
+              3000,
+              1500
+            ],
+            "properties": {
+              "name": "Golf",
+              "rank": 4
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 13,
+          "archive_offset": 980,
+          "leaf_directory": {
+            "archive_offset": 553,
+            "length": 37
+          }
+        }
+      },
+      {
+        "z": 2,
+        "x": 2,
+        "y": 1,
+        "tms_row": 2,
+        "status": "present",
+        "purpose": "TMS mirror of 2/2/2, different content",
+        "sha256": "57d259bacbcbc8b560c8b724b8fe5e0216be7c20724ec091a77e30a382d4d90a",
+        "length": 84,
+        "mvt_sha256": "f43106c1c321531e61e325b536b368ce580a1159c095d3118c6422bd12cdc73a",
+        "features": [
+          {
+            "layer": "points",
+            "id": 6,
+            "type": "Point",
+            "coordinates": [
+              1000,
+              2000
+            ],
+            "properties": {
+              "name": "Foxtrot",
+              "rank": 4
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 18,
+          "archive_offset": 1061,
+          "leaf_directory": {
+            "archive_offset": 553,
+            "length": 37
+          }
+        }
+      },
+      {
+        "z": 3,
+        "x": 0,
+        "y": 0,
+        "tms_row": 7,
+        "status": "absent",
+        "purpose": "absent; tile id 21, inside the second leaf directory's range",
+        "pmtiles": {
+          "tile_id": 21,
+          "leaf_directory": {
+            "archive_offset": 553,
+            "length": 37
+          }
+        }
+      },
+      {
+        "z": 3,
+        "x": 5,
+        "y": 2,
+        "tms_row": 5,
+        "status": "present",
+        "purpose": "z3 tile in the last leaf directory",
+        "sha256": "00e386273e7f553333f9fb055ed2f70fd225d64079392f737d878b208b4c82b5",
+        "length": 82,
+        "mvt_sha256": "e1ed7bf4bdaab3a904398008bf9cd1bf42f1a3c89e5ae41e1b1cf5b81075cc4b",
+        "features": [
+          {
+            "layer": "points",
+            "id": 8,
+            "type": "Point",
+            "coordinates": [
+              4000,
+              96
+            ],
+            "properties": {
+              "name": "Hotel",
+              "rank": 5
+            }
+          }
+        ],
+        "pmtiles": {
+          "tile_id": 76,
+          "archive_offset": 1145,
+          "leaf_directory": {
+            "archive_offset": 590,
+            "length": 29
+          }
+        }
+      }
+    ]
+  }
 }

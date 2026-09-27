@@ -53,8 +53,12 @@ func (t TileType) String() string {
 	return "undefined"
 }
 
-// TileTypePNG is the only tile type the lab generates.
-const TileTypePNG TileType = 2
+// Tile types the lab generates: PNG for the conformance corpus, MVT for the
+// shared vector tile corpus.
+const (
+	TileTypeMVT TileType = 1
+	TileTypePNG TileType = 2
+)
 
 // Header is the fixed 127-byte PMTiles v3 header. Positions are stored as
 // the raw E7 integers from the file.

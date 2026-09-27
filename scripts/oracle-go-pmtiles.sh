@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Independent oracle: checks every valid fixture with go-pmtiles (pinned),
+# Independent oracle: checks every valid fixture and the MVT corpus PMTiles
+# archive (header, directory lookup, tile bytes) with go-pmtiles (pinned),
 # which is installed into a temporary GOBIN and never vendored.
 # Needs network access to the Go module proxy; not part of CI.
 #   scripts/oracle-go-pmtiles.sh [FIXTURES_DIR]
@@ -36,6 +37,28 @@ for a in m["archives"]:
             bad += 1
             print(f"  MISMATCH {t['z']}/{t['x']}/{t['y']}: got {got} want {want}")
     print(f"tile   {a['file']}: {ok}/{len(a['tiles'])} manifest expectations match")
+c = m.get("mvt_corpus")
+if c:
+    f = next(f"{d}/{x['file']}" for x in c["files"] if x["format"] == "pmtiles")
+    v = subprocess.run([oracle, "verify", f], capture_output=True, text=True)
+    print(f"verify {f[len(d)+1:]}: exit {v.returncode}")
+    bad += v.returncode != 0
+    s = subprocess.run([oracle, "show", f], capture_output=True, text=True)
+    for want in ("tile type: mvt", "tile compression: gzip"):
+        if want not in s.stdout.lower():
+            bad += 1
+            print(f"  MISMATCH show: {want!r} not found")
+    ok = 0
+    for t in c["tiles"]:
+        out = subprocess.run([oracle, "tile", f, str(t["z"]), str(t["x"]), str(t["y"])], capture_output=True)
+        got = hashlib.sha256(out.stdout).hexdigest() if out.stdout else None
+        want = t.get("sha256") if t["status"] == "present" else None
+        if out.returncode == 0 and got == want:
+            ok += 1
+        else:
+            bad += 1
+            print(f"  MISMATCH {t['z']}/{t['x']}/{t['y']}: got {got} want {want}")
+    print(f"tile   {f[len(d)+1:]}: {ok}/{len(c['tiles'])} mvt_corpus expectations match")
 print("oracle result:", "PASS" if bad == 0 else f"FAIL ({bad})")
 sys.exit(1 if bad else 0)
 PY

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.x (released automatically from `main`)
+
+Generator version 0.4.0. Releases are now published automatically; the CLI version (`v0.4.N`, N = CI run number) is separate from the generator version. The bytes and SHA-256 of every 0.3.0 archive, the `archives` list, the schema identifiers (`pmtiles-lab-manifest/1`, `pmtiles-lab-inspect/1`, `pmtiles-lab-probe/1`), the 16 scenario names and the range server's behaviour are unchanged. `manifest.json` and `SHA256SUMS` change because they gain the MVT corpus and the new generator version.
+
+* Shared MVT corpus: `fixtures/mvt/points.pmtiles` (PMTiles v3, mvt, gzip tiles, root -> leaf lookups) and `fixtures/mvt/points.mbtiles` (MBTiles 1.3, format pbf, `vector_layers`, TMS rows) hold the same gzip tile bytes for 7 tiles of labelled points; 3 absent coordinates and TMS row mirrors expose Y conversion mistakes. Expected decoded features are in the new optional `mvt_corpus` manifest section. Written by hand-written MVT and SQLite encoders; standard library only.
+* `serve-xyz`: serve a PBF MBTiles file read-only as TileJSON 3.0.0 plus `/{z}/{x}/{y}.pbf` (gzip content encoding, 404 for missing tiles, other formats refused).
+* `tilecheck`: fetch the corpus through a PMTiles archive (file or HTTP ranges) or a TileJSON endpoint, decode every tile and compare features; gzip or identity responses both pass, and byte equality with the corpus is reported separately. JSON report `pmtiles-lab-tilecheck/1`.
+* `version` prints the CLI version and the generator version separately.
+* Verification: `verify/` module (orb MVT decoder, modernc SQLite engine), go-pmtiles oracle over the new archive ([docs/results/mvt-corpus-go-pmtiles-1.31.2.txt](docs/results/mvt-corpus-go-pmtiles-1.31.2.txt)).
+* Dependency: `modernc.org/sqlite` v1.46.1 (CGO-free) for reading MBTiles. The Go floor stays 1.24.
+* CI: release binaries built and smoke-tested natively on Linux, Windows and macOS; `release` job publishes on push to `main`.
+
 ## v0.3.0 (unreleased, not tagged)
 
 Generator version 0.3.0. Two HTTP boundary cases; nothing existing is renamed or re-encoded. The bytes and SHA-256 of every 0.2.0 archive, the schema identifiers (`pmtiles-lab-manifest/1`, `pmtiles-lab-inspect/1`, `pmtiles-lab-probe/1`) and all 15 scenario names are unchanged. `manifest.json` and `SHA256SUMS` change because they list the new archive and the new generator version.
