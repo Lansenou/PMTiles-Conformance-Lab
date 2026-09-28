@@ -209,7 +209,7 @@ func (s *Server) serveArchive(w http.ResponseWriter, r *http.Request) {
 		Method: r.Method, Path: r.URL.Path,
 		Range: r.Header.Get("Range"), IfMatch: r.Header.Get("If-Match"),
 		IfNoneMatch: r.Header.Get("If-None-Match"), IfRange: r.Header.Get("If-Range"),
-		Origin: r.Header.Get("Origin"),
+		Origin: r.Header.Get("Origin"), AcceptEncoding: r.Header.Values("Accept-Encoding"),
 	}
 	seq, gen := s.trace.seq()
 	sc, f := s.route(r.URL.Path)

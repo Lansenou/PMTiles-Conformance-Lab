@@ -1,0 +1,12 @@
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-range-body","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-range-body","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-range-body","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-full-200","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Range requests unsupported","requests":1,"statuses":{"200":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-full-200","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Range requests unsupported","requests":1,"statuses":{"200":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-full-200","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Range requests unsupported","requests":1,"statuses":{"200":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"encoding-label-only","archive":"root-none","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":19,"statuses":{"206":19},"outcome":"ok"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"encoding-label-only","archive":"root-gzip","tiles_ok":11,"tiles_wrong":0,"error":null,"requests":19,"statuses":{"206":19},"outcome":"ok"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"encoding-label-only","archive":"leaves-gzip","tiles_ok":32,"tiles_wrong":0,"error":null,"requests":88,"statuses":{"206":88},"outcome":"ok"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-unrequested","archive":"root-none","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-unrequested","archive":"root-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}
+{"reader":"pmtiles-rs-0.24.0","scenario":"gzip-unrequested","archive":"leaves-gzip","tiles_ok":0,"tiles_wrong":0,"error":"exit 1; stderr: Invalid magic number","requests":1,"statuses":{"206":1},"outcome":"error"}

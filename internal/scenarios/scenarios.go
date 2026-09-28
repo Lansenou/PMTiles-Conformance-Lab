@@ -4,6 +4,8 @@
 package scenarios
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -111,6 +113,29 @@ func All() []rangeserver.Scenario {
 			Name: "cors-no-expose", Validity: Valid,
 			Description: "No Access-Control-Expose-Headers, so browsers hide ETag and Content-Range.",
 			Mutate:      corsNoExpose,
+		},
+		{
+			Name: "gzip-range-body", Validity: Invalid,
+			Description: "206 with Content-Range unchanged, but the body is the gzip of the requested bytes, " +
+				"with Content-Encoding: gzip and the compressed Content-Length.",
+			Mutate: gzipRangeBody,
+		},
+		{
+			Name: "gzip-full-200", Validity: ValidUnusual,
+			Description: "Range is ignored: every GET with a Range header gets a 200 with the gzip of the full file, " +
+				"Content-Encoding: gzip and the compressed Content-Length.",
+			Mutate: gzipFull200,
+		},
+		{
+			Name: "encoding-label-only", Validity: Invalid,
+			Description: "Normal 206 with the uncompressed body, but with a Content-Encoding: gzip header.",
+			Mutate:      encodingLabelOnly,
+		},
+		{
+			Name: "gzip-unrequested", Validity: Invalid,
+			Description: "As gzip-range-body, but only for requests without an Accept-Encoding header; " +
+				"any Accept-Encoding header (e.g. identity) gets the normal response.",
+			Mutate: gzipUnrequested,
 		},
 	}
 }
@@ -298,4 +323,57 @@ func corsWrongOrigin(x *rangeserver.Exchange) {
 
 func corsNoExpose(x *rangeserver.Exchange) {
 	x.Resp.Header.Del("Access-Control-Expose-Headers")
+}
+
+// gzipBytes returns the gzip of b with an empty gzip header (no name, no
+// modification time), so equal input gives equal output.
+func gzipBytes(b []byte) []byte {
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	w.Write(b)
+	w.Close()
+	return buf.Bytes()
+}
+
+// setGzipBody replaces the body with its gzip and labels it. RFC 9110 §8.4:
+// all other metadata, Content-Range included, is then about the coded form.
+func setGzipBody(x *rangeserver.Exchange, data []byte) {
+	x.Resp.Body = gzipBytes(data)
+	x.Resp.Header.Set("Content-Encoding", "gzip")
+	x.Resp.Header.Set("Content-Length", strconv.Itoa(len(x.Resp.Body)))
+}
+
+// gzipRangeBody compresses the bytes of a 206 on their own, as a compressing
+// proxy that ignores ranges would, and keeps the uncoded Content-Range.
+func gzipRangeBody(x *rangeserver.Exchange) {
+	if _, _, _, ok := partial(x); !ok {
+		return
+	}
+	setGzipBody(x, x.Resp.Body)
+}
+
+// gzipFull200 is ignore-range with the full 200 body gzip-coded.
+func gzipFull200(x *rangeserver.Exchange) {
+	ignoreRange(x)
+	if !rangeHandled(x) || x.Resp.Status != http.StatusOK {
+		return
+	}
+	setGzipBody(x, x.File.Data)
+}
+
+func encodingLabelOnly(x *rangeserver.Exchange) {
+	if _, _, _, ok := partial(x); !ok {
+		return
+	}
+	x.Resp.Header.Set("Content-Encoding", "gzip")
+}
+
+// gzipUnrequested applies gzip-range-body only when the request carries no
+// Accept-Encoding header, which RFC 9110 §12.5.3 reads as "any content coding
+// is considered acceptable".
+func gzipUnrequested(x *rangeserver.Exchange) {
+	if x.Req.AcceptEncoding != nil {
+		return
+	}
+	gzipRangeBody(x)
 }

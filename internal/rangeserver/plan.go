@@ -29,7 +29,8 @@ func NewFile(path string, data []byte) *File {
 }
 
 // Request holds the request fields the lab reads. No other request header is
-// consulted or recorded.
+// consulted or recorded. AcceptEncoding is read only by scenarios and is not
+// traced.
 type Request struct {
 	Method      string
 	Path        string
@@ -38,6 +39,9 @@ type Request struct {
 	IfNoneMatch string
 	IfRange     string
 	Origin      string
+	// AcceptEncoding holds the Accept-Encoding field lines; nil when the
+	// request has no Accept-Encoding header.
+	AcceptEncoding []string
 }
 
 // Response is a complete description of what will be written.

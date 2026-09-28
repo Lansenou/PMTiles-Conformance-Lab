@@ -3,7 +3,7 @@
 `pmtiles-lab` helps you test a [PMTiles v3](https://github.com/protomaps/PMTiles/blob/8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5/spec/v3/spec.md) reader that fetches archives over HTTP range requests. It gives you:
 
 1. **Fixtures:** small deterministic synthetic archives, valid and deliberately malformed, with a manifest of the expected lookup results (tile hashes and absolute byte ranges).
-2. **Fault server:** a loopback HTTP endpoint that serves raw archive bytes under a named scenario. Each fault changes exactly one thing: a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, and more. One scenario, `ignore-range-no-length`, is a documented framing variant of `ignore-range` (no `Content-Length`).
+2. **Fault server:** a loopback HTTP endpoint that serves raw archive bytes under a named scenario. Each fault changes exactly one thing: a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, gzip `Content-Encoding` on range responses, and more. One scenario, `ignore-range-no-length`, is a documented framing variant of `ignore-range` (no `Content-Length`).
 3. **Trace:** a bounded, machine-readable record of every request your client made and every byte the server sent.
 4. **Probe:** a reference client that runs the same checks and produces an exact JSON report.
 5. **Shared MVT corpus and XYZ path:** one small original vector tileset with known decoded features, packaged as PMTiles and as MBTiles with identical tile bytes. `serve-xyz` serves any PBF MBTiles file as TileJSON plus `/{z}/{x}/{y}.pbf`, and `tilecheck` fetches the corpus through either delivery path and compares the decoded features with the manifest ([below](#same-tiles-through-pmtiles-and-xyz)).
@@ -175,6 +175,8 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 
 ## Scenarios
 
+20 scenarios. The last four cover `Content-Encoding` on range responses, as sent by a CDN or proxy that compresses `.pmtiles`.
+
 | Name | What changes | Server response |
 |---|---|---|
 | `normal` | nothing | conforming |
@@ -193,6 +195,10 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 | `cors-missing` | no `Access-Control-*` headers | valid HTTP; browsers block reads |
 | `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | valid HTTP; browsers block reads |
 | `cors-no-expose` | no `Access-Control-Expose-Headers` | valid; browsers hide `ETag` and `Content-Range` |
+| `gzip-range-body` | 206 body is the gzip of the requested bytes, `Content-Encoding: gzip`, `Content-Range` unchanged | invalid |
+| `gzip-full-200` | Range ignored; 200 with the gzip of the whole file, `Content-Encoding: gzip` | valid but unusual |
+| `encoding-label-only` | normal 206 body with a `Content-Encoding: gzip` header | invalid |
+| `gzip-unrequested` | as `gzip-range-body`, only for requests without `Accept-Encoding` | invalid |
 
 Full table with sources, lab recommendations, the probe's results, three third-party readers and Chromium results: [docs/scenarios.md](docs/scenarios.md).
 
@@ -230,7 +236,7 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 * **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
 * **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). On macOS (`macos-latest`, Apple silicon) it runs the CLI smoke test only, not the Go test suite. The CGO-free release binaries are smoke-tested natively on linux/amd64, windows/amd64 and darwin/arm64 (darwin/amd64 too if the runner has Rosetta 2); linux/arm64 is built but not launched. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.
-* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The scenario matrices cover the original 15 scenarios and 3 valid fixtures only; `exact-8192` was read by go-pmtiles and pmtiles-rs under `normal` only, and no third-party reader has been run against `ignore-range-no-length`.
+* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The scenario matrices cover the original 15 scenarios and 3 valid fixtures only; `exact-8192` was read by go-pmtiles and pmtiles-rs under `normal` only, and no third-party reader has been run against `ignore-range-no-length`. The four `Content-Encoding` scenarios were run separately (2026-09-28) through the same three readers on the same 3 fixtures ([docs/results/content-encoding.md](docs/results/content-encoding.md)).
 * **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It is not a production client.
 
 ## Development
