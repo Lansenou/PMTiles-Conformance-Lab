@@ -1,6 +1,8 @@
 package scenarios
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -123,6 +125,7 @@ var documented = []string{
 	"normal", "wrong-content-range", "status-200-partial-body", "truncated-body", "overlong-body",
 	"expanded-range", "short-range", "ignore-range", "ignore-range-no-length", "always-416", "etag-change", "slow-headers", "stall-body",
 	"cors-missing", "cors-wrong-origin", "cors-no-expose",
+	"gzip-range-body", "gzip-full-200", "encoding-label-only", "gzip-unrequested",
 }
 
 func TestNamesAndValidity(t *testing.T) {
@@ -154,6 +157,7 @@ func TestNamesAndValidity(t *testing.T) {
 		"short-range":  Valid,
 		"ignore-range": Valid, "ignore-range-no-length": Valid, "always-416": Invalid, "etag-change": ValidUnusual, "slow-headers": Valid,
 		"stall-body": Invalid, "cors-missing": ValidBlocksJS, "cors-wrong-origin": ValidBlocksJS, "cors-no-expose": Valid,
+		"gzip-range-body": Invalid, "gzip-full-200": ValidUnusual, "encoding-label-only": Invalid, "gzip-unrequested": Invalid,
 	}
 	for _, s := range all {
 		if s.Validity != want[s.Name] {
@@ -198,6 +202,12 @@ func TestScenariosExact(t *testing.T) {
 		return h
 	}
 	zeros := make([]byte, 16)
+	// Coded bodies: the expected bytes come from gzipBytes, and each row
+	// also states what the body must decode to.
+	gzRange, gzFull := gzipBytes(data[100:200]), gzipBytes(data)
+	gzPart := part(100, 199, 1000, "Content-Length", fmt.Sprint(len(gzRange)), "Content-Encoding", "gzip")
+	gzWhole := get("Content-Type", ct, "Content-Length", fmt.Sprint(len(gzFull)), "Content-Encoding", "gzip")
+	ae := func(v string) http.Header { return http.Header{"Accept-Encoding": {v}} }
 
 	type tc struct {
 		sc       string
@@ -213,6 +223,7 @@ func TestScenariosExact(t *testing.T) {
 		path     string      // defaults to the scenario URL
 		extra    http.Header // extra request headers
 		framing  string      // Transfer-Encoding as parsed by the client
+		decoded  []byte      // if set, the body must gunzip to these bytes
 	}
 	tests := []tc{
 		{sc: "normal", method: "GET", rng: "bytes=100-199", status: 206, header: part(100, 199, 1000), body: data[100:200], complete: true},
@@ -263,6 +274,24 @@ func TestScenariosExact(t *testing.T) {
 		{sc: "cors-wrong-origin", method: "GET", path: "/scenarios/cors-wrong-origin/nope", status: 404, header: hdr("Access-Control-Allow-Origin", WrongOrigin, "Content-Length", "0"), complete: true},
 		{sc: "cors-no-expose", method: "GET", rng: "bytes=100-199", status: 206, header: part(100, 199, 1000, "Access-Control-Expose-Headers", ""), body: data[100:200], complete: true},
 		{sc: "cors-no-expose", method: "OPTIONS", status: 204, header: preflight(), complete: true},
+		{sc: "gzip-range-body", method: "GET", rng: "bytes=100-199", status: 206, header: gzPart, body: gzRange, decoded: data[100:200], complete: true},
+		{sc: "gzip-range-body", method: "GET", rng: "bytes=100-199", extra: ae("identity"), status: 206, header: gzPart, body: gzRange, decoded: data[100:200], complete: true},
+		{sc: "gzip-range-body", method: "GET", status: 200, header: full, body: data, complete: true},
+		{sc: "gzip-range-body", method: "GET", rng: "bytes=5000-", status: 416, header: get("Content-Range", "bytes */1000", "Content-Length", "0"), complete: true},
+		{sc: "gzip-range-body", method: "HEAD", rng: "bytes=100-199", status: 200, header: full, complete: true},
+		{sc: "gzip-full-200", method: "GET", rng: "bytes=100-199", status: 200, header: gzWhole, body: gzFull, decoded: data, complete: true},
+		{sc: "gzip-full-200", method: "GET", rng: "bytes=5000-", status: 200, header: gzWhole, body: gzFull, decoded: data, complete: true},
+		{sc: "gzip-full-200", method: "GET", rng: "bytes=abc", extra: ae("identity"), status: 200, header: gzWhole, body: gzFull, decoded: data, complete: true},
+		{sc: "gzip-full-200", method: "GET", status: 200, header: full, body: data, complete: true},
+		{sc: "gzip-full-200", method: "HEAD", rng: "bytes=100-199", status: 200, header: full, complete: true},
+		{sc: "gzip-full-200", method: "GET", rng: "bytes=100-199", extra: hdr("If-None-Match", etag), status: 304, header: get(), complete: true},
+		{sc: "encoding-label-only", method: "GET", rng: "bytes=100-199", status: 206, header: part(100, 199, 1000, "Content-Encoding", "gzip"), body: data[100:200], complete: true},
+		{sc: "encoding-label-only", method: "GET", status: 200, header: full, body: data, complete: true},
+		{sc: "encoding-label-only", method: "GET", rng: "bytes=5000-", status: 416, header: get("Content-Range", "bytes */1000", "Content-Length", "0"), complete: true},
+		{sc: "gzip-unrequested", method: "GET", rng: "bytes=100-199", status: 206, header: gzPart, body: gzRange, decoded: data[100:200], complete: true},
+		{sc: "gzip-unrequested", method: "GET", rng: "bytes=100-199", extra: ae("identity"), status: 206, header: part(100, 199, 1000), body: data[100:200], complete: true},
+		{sc: "gzip-unrequested", method: "GET", rng: "bytes=100-199", extra: ae("gzip"), status: 206, header: part(100, 199, 1000), body: data[100:200], complete: true},
+		{sc: "gzip-unrequested", method: "GET", rng: "bytes=100-199", extra: ae(""), status: 206, header: part(100, 199, 1000), body: data[100:200], complete: true},
 	}
 	for i, c := range tests {
 		t.Run(fmt.Sprintf("%02d-%s-%s-%s", i, c.sc, c.method, c.rng), func(t *testing.T) {
@@ -302,6 +331,11 @@ func TestScenariosExact(t *testing.T) {
 			}
 			if !errors.Is(rerr, c.readErr) || (c.readErr == nil) != (rerr == nil) {
 				t.Errorf("read error %v, want %v", rerr, c.readErr)
+			}
+			if c.decoded != nil {
+				if d, err := gunzip(body); err != nil || sum(d) != sum(c.decoded) {
+					t.Errorf("gunzip: %d bytes, %v; want %d bytes", len(d), err, len(c.decoded))
+				}
 			}
 			sent := c.sent
 			if sent == nil {
@@ -501,6 +535,7 @@ func TestOneChangeAtATime(t *testing.T) {
 		acam = "Access-Control-Allow-Methods"
 		acah = "Access-Control-Allow-Headers"
 		acma = "Access-Control-Max-Age"
+		ce   = "Content-Encoding"
 	)
 	get := []string{"get", "range", "head", "invalid", "inm"}
 	each := func(names []string, aspects ...string) map[string][]string {
@@ -538,6 +573,12 @@ func TestOneChangeAtATime(t *testing.T) {
 		"cors-missing":      merge(each(get, acao, aceh), map[string][]string{"options": {acao, acah, acam, acma}}),
 		"cors-wrong-origin": each(append(get, "options"), acao),
 		"cors-no-expose":    each(get, aceh),
+		// "range" and "invalid" carry no Accept-Encoding header: the Go
+		// client adds one only to requests without Range.
+		"gzip-range-body":     {"range": {cl, body, ce}},
+		"gzip-full-200":       {"range": {st, cl, cr, body, ce}, "invalid": {cl, body, ce}},
+		"encoding-label-only": {"range": {ce}},
+		"gzip-unrequested":    {"range": {cl, body, ce}},
 	}
 	ctx := context.Background()
 	observe := func(sc string, r request) obs {
@@ -688,5 +729,45 @@ func TestFileDataUnchanged(t *testing.T) {
 	}
 	if sum(l.file.Data) != before {
 		t.Fatal("file data modified")
+	}
+}
+
+func gunzip(b []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
+}
+
+// TestGzipUnrequestedVariant: gzip-unrequested behaves as gzip-range-body
+// for requests without Accept-Encoding and as normal for any request with
+// one.
+func TestGzipUnrequestedVariant(t *testing.T) {
+	l := newLab(t, 0)
+	ctx := context.Background()
+	for _, h := range []http.Header{
+		hdr("Range", "bytes=100-199"),
+		hdr("Range", "bytes=0-"),
+		hdr("Range", "bytes=990-999"),
+		hdr("Range", "bytes=100-199", "Accept-Encoding", "identity"),
+		hdr("Range", "bytes=100-199", "Accept-Encoding", "gzip, deflate"),
+		hdr("Range", "bytes=100-199", "Accept-Encoding", "*;q=0"),
+	} {
+		base := "gzip-range-body"
+		if h.Get("Accept-Encoding") != "" {
+			base = "normal"
+		}
+		want, err := l.do(ctx, t, "GET", base, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := l.do(ctx, t, "GET", "gzip-unrequested", h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := diff(want, got, time.Hour); len(d) != 0 {
+			t.Errorf("%v: differs from %s in %q", h, base, d)
+		}
 	}
 }
