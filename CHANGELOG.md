@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* License: the project is now Apache-2.0 (was MIT), with a `NOTICE` file that redistributions and derivative works must retain. The MVT corpus `content_rights` text in `manifest.json` changes to match; archive bytes and SHA-256 are unchanged. Releases also publish `LICENSE` and `NOTICE` (9 assets, was 7).
 * Four new scenarios, appended after `cors-no-expose`, covering `Content-Encoding` on PMTiles range responses: `gzip-range-body`, `gzip-full-200`, `encoding-label-only`, `gzip-unrequested` (20 scenarios in all). Existing scenario names and behaviour, fixtures, schema identifiers, CLI flags and exit codes are unchanged. The trace fields are unchanged; `Accept-Encoding` is read by `gzip-unrequested` but not recorded.
 * Tests: table tests per new scenario, `TestGzipUnrequestedVariant`, and the probe matrix now covers 4 archives × 20 scenarios.
 * Evidence: pmtiles npm 4.5.0, go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 run against the four scenarios × 3 valid fixtures ([docs/results/content-encoding.md](docs/results/content-encoding.md)).

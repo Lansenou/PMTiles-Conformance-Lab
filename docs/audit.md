@@ -10,5 +10,5 @@ Date: 2026-09-26. Scope: every tracked file on the integration branch, plus comm
 | Binary files | every tracked file checked for text | only `fixtures/**/*.pmtiles`, all written by `pmtiles-lab generate` and pinned by `SHA256SUMS` and `TestGolden` |
 | Real map data, screenshots, borrowed fixtures | file list review | none; tiles are solid-colour PNGs from constants ([fixtures.md](fixtures.md)) |
 | Copied source | written for this repository; upstream repos were read for the spec and API behaviour only | no upstream code or fixtures; the Go module has no dependencies |
-| Licenses | `LICENSE` (MIT); `THIRD_PARTY_NOTICES.md` lists tools installed at check time | complete |
+| Licenses | `LICENSE` (Apache-2.0), `NOTICE`; `THIRD_PARTY_NOTICES.md` lists tools installed at check time | complete |
 | Commit metadata | `git log --format='%an <%ae>'` | all commits authored as `Claude <noreply@anthropic.com>`; trailers carry a claude.ai session link, which the owner may want to review before the repository becomes public |

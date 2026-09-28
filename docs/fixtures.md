@@ -7,7 +7,7 @@ Every file under `fixtures/` is written by `pmtiles-lab generate` (generator 0.4
 * **Compression:** gzip is a hand-written stored-block gzip member (mtime 0, OS 255). The decompression bomb is one hand-written fixed-Huffman deflate block. zstd frames in `unsupported-zstd` use raw blocks.
 * **Determinism:** the output does not depend on the Go version, time, locale or randomness. `TestGolden` pins the SHA-256 of every file, and `scripts/check.sh` regenerates the corpus and diffs it with the committed copy.
 * **Verification:** `cd fixtures && sha256sum --check SHA256SUMS`.
-* **License:** the generated fixtures, including `exact-8192` (added in 0.3.0), are original output of this repository's code and are covered by its MIT license ([LICENSE](../LICENSE)).
+* **License:** the generated fixtures, including `exact-8192` (added in 0.3.0), are original output of this repository's code and are covered by its Apache-2.0 license ([LICENSE](../LICENSE), attribution in [NOTICE](../NOTICE)).
 * **Versions:** generator 0.4.0 added the shared MVT corpus (`mvt/points.pmtiles`, `mvt/points.mbtiles`) and the optional `mvt_corpus` manifest section, below. Every archive of 0.3.0 has the same bytes and SHA-256 as before, and the `archives` list is unchanged; `manifest.json` and `SHA256SUMS` changed because of the new section, the new files and the generator version. Generator 0.3.0 added `exact-8192` only. Every archive of 0.2.0 has the same bytes and SHA-256 as before; `manifest.json` and `SHA256SUMS` changed because they list the new archive and the new generator version.
 
 ## Valid archives
@@ -58,7 +58,7 @@ One original vector tileset, packaged twice with identical stored tile bytes, so
 | `mvt/points.pmtiles` | 1227 | `86323bf17d7eec9571e1d83e03e6c7b57571c0e55d8f2a940b5a35761095547f` | PMTiles v3: tile type `mvt`, tile compression `gzip`, internal compression `gzip`, clustered; the root directory holds only 3 leaf entries, so every lookup is root -> leaf; metadata carries `vector_layers` |
 | `mvt/points.mbtiles` | 16384 | `05c1a66c8acaf3d5e17275d6e72f2f7b0689af191aac8d4de309e020030fdb01` | MBTiles 1.3 (SQLite 3, `application_id` 0x4d504258): `metadata` rows `name`, `format`=`pbf`, `bounds`, `center`, `minzoom`, `maxzoom`, `description`, `type`, `version`, `json` (`vector_layers`); `tiles` with TMS `tile_row`; unique `tile_index` |
 
-**Content.** One layer `points` (MVT 2.1, version 2, extent 4096). Each feature is a point with an `id`, a `name` string (the ICAO spelling alphabet) and a `rank` unsigned integer. Coordinates are tile pixels, origin top-left. The data is invented for this repository: no map data, no downloads, no third-party content; MIT like the rest of the repository.
+**Content.** One layer `points` (MVT 2.1, version 2, extent 4096). Each feature is a point with an `id`, a `name` string (the ICAO spelling alphabet) and a `rank` unsigned integer. Coordinates are tile pixels, origin top-left. The data is invented for this repository: no map data, no downloads, no third-party content; Apache-2.0 like the rest of the repository.
 
 | XYZ z/x/y | MBTiles `tile_row` | tile id | status | features | stored bytes | leaf directory | why |
 |---|---|---|---|---|---|---|---|

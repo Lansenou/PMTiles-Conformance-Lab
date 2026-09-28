@@ -38,7 +38,7 @@ jobs:
           cache: false
       - run: go version
       - run: ./scripts/check.sh
-      - name: Build the five release binaries, fixture bundle and SHA256SUMS
+      - name: Build the five release binaries, fixture bundle, LICENSE, NOTICE and SHA256SUMS
         run: ./scripts/build-release.sh "$VERSION" dist
       - name: Check every binary is a CGO-free executable for its target
         run: |
@@ -139,7 +139,7 @@ jobs:
         run: |
           case $VERSION in v0.4.[0-9]*) ;; *) echo "bad version $VERSION"; exit 1 ;; esac
           (cd dist && sha256sum --check SHA256SUMS)
-          test "$(ls dist | wc -l)" -eq 7
+          test "$(ls dist | wc -l)" -eq 9
           ls -l dist
       - name: Create the release (idempotent; never moves a tag)
         env:

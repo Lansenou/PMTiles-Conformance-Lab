@@ -271,4 +271,4 @@ Every push to `main` whose Linux, Windows and macOS CI jobs pass publishes a Git
 
 ## License
 
-Original code and generated fixtures, including `exact-8192` and the MVT corpus: MIT ([LICENSE](LICENSE)). The binary links `modernc.org/sqlite` (BSD-3-Clause, CGO-free) for `serve-xyz`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The PMTiles specification is public domain / CC0. Tools used outside the Go module are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original code and generated fixtures, including `exact-8192` and the MVT corpus: Apache-2.0 ([LICENSE](LICENSE)). Redistributions and derivative works must keep the attribution in [NOTICE](NOTICE). The binary links `modernc.org/sqlite` (BSD-3-Clause, CGO-free) for `serve-xyz`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The PMTiles specification is public domain / CC0. Tools used outside the Go module are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
