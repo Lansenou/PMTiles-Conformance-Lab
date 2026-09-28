@@ -19,7 +19,7 @@ const (
 	mvtMBTilesPath   = "mvt/points.mbtiles"
 	mbtilesAppID     = 0x4d504258 // "MPBX", the MBTiles application_id
 	mvtContentRights = "Original synthetic data written for this repository (names are the ICAO spelling alphabet, " +
-		"positions are arbitrary tile coordinates). No map data or third-party content. MIT, see LICENSE."
+		"positions are arbitrary tile coordinates). No map data or third-party content. Apache-2.0, see LICENSE and NOTICE."
 )
 
 // mvtTile is one corpus tile at XYZ coordinates (y grows southwards).

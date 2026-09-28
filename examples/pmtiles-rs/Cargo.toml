@@ -3,7 +3,7 @@ name = "pmtiles-rs-tile"
 version = "0.1.0"
 edition = "2021"
 publish = false
-license = "MIT"
+license = "Apache-2.0"
 description = "Fetch one tile over HTTP with the pmtiles crate; used by pmtiles-lab's CLI reader harness."
 
 [dependencies]

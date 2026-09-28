@@ -23,7 +23,8 @@ Built once by the `check` job and handed to `release` as a workflow artifact, so
 |---|---|
 | `pmtiles-lab_v0.4.N_linux_amd64`, `_linux_arm64`, `_darwin_amd64`, `_darwin_arm64`, `_windows_amd64.exe` | `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -buildid= -X main.version=v0.4.N"` |
 | `pmtiles-lab-fixtures_v0.4.N.tar.gz` | `fixtures/` (tar sorted by name, owner 0, mtime 0, `gzip -n`) |
-| `SHA256SUMS` | SHA-256 of the six files above; check with `sha256sum --check SHA256SUMS` |
+| `LICENSE`, `NOTICE` | Apache-2.0 license text and the attribution notice redistributors must keep |
+| `SHA256SUMS` | SHA-256 of the eight files above; check with `sha256sum --check SHA256SUMS` |
 
 `scripts/build-release.sh VERSION OUTDIR` produces exactly these files locally. The Go version comes from `go.mod` (`go-version-file`), so the same toolchain rebuilds the same bytes.
 

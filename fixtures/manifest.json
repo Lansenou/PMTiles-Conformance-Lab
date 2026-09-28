@@ -1005,7 +1005,7 @@
   "mvt_corpus": {
     "name": "mvt-points",
     "description": "One original MVT tileset, packaged as PMTiles v3 and MBTiles 1.3 with identical gzip tile bytes. Expected features come from the corpus source, not from either file.",
-    "content_rights": "Original synthetic data written for this repository (names are the ICAO spelling alphabet, positions are arbitrary tile coordinates). No map data or third-party content. MIT, see LICENSE.",
+    "content_rights": "Original synthetic data written for this repository (names are the ICAO spelling alphabet, positions are arbitrary tile coordinates). No map data or third-party content. Apache-2.0, see LICENSE and NOTICE.",
     "generator_inputs": "internal/fixtures/mvtcorpus.go (tiles and features), mvt.go (MVT 2.1 encoder), sqlite.go (SQLite 3 file writer), encode.go (stored-block gzip). Go standard library only; no third-party code or data.",
     "tile_format": "mvt",
     "tile_compression": "gzip",

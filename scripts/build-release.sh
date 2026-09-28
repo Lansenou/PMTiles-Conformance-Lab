@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the release binaries, the fixture bundle and SHA256SUMS.
+# Build the release binaries, the fixture bundle, LICENSE, NOTICE and SHA256SUMS.
 #   scripts/build-release.sh VERSION OUTDIR [GOOS/GOARCH ...]
 # Default targets: the five release targets. CGO is disabled, paths are
 # trimmed and the build ID is empty, so the same Go version rebuilds the same
@@ -21,5 +21,6 @@ for t in "${targets[@]}"; do
 done
 # Deterministic bundle: sorted names, fixed owner and mtime, no gzip name/time.
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -cf - fixtures | gzip -n -9 > "$out/pmtiles-lab-fixtures_${version}.tar.gz"
+cp LICENSE NOTICE "$out/"
 (cd "$out" && rm -f SHA256SUMS && sha256sum -- * > SHA256SUMS.tmp && mv SHA256SUMS.tmp SHA256SUMS)
 ls -l "$out"
