@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+* Four new scenarios, appended after `cors-no-expose`, covering `Content-Encoding` on PMTiles range responses: `gzip-range-body`, `gzip-full-200`, `encoding-label-only`, `gzip-unrequested` (20 scenarios in all). Existing scenario names and behaviour, fixtures, schema identifiers, CLI flags and exit codes are unchanged. The trace fields are unchanged; `Accept-Encoding` is read by `gzip-unrequested` but not recorded.
+* Tests: table tests per new scenario, `TestGzipUnrequestedVariant`, and the probe matrix now covers 4 archives × 20 scenarios.
+* Evidence: pmtiles npm 4.5.0, go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 run against the four scenarios × 3 valid fixtures ([docs/results/content-encoding.md](docs/results/content-encoding.md)).
+
 ## v0.4.x (released automatically from `main`)
 
 Generator version 0.4.0. Releases are now published automatically; the CLI version (`v0.4.N`, N = CI run number) is separate from the generator version. The bytes and SHA-256 of every 0.3.0 archive, the `archives` list, the schema identifiers (`pmtiles-lab-manifest/1`, `pmtiles-lab-inspect/1`, `pmtiles-lab-probe/1`), the 16 scenario names and the range server's behaviour are unchanged. `manifest.json` and `SHA256SUMS` change because they gain the MVT corpus and the new generator version.

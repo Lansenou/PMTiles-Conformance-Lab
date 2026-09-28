@@ -2,7 +2,7 @@
 
 A scenario is selected per request with `/scenarios/<name>/<file>`, or for plain `/<file>` URLs with `serve --scenario NAME`. Names are stable. Each fault changes one behaviour of `normal`; the "one change at a time" test in `internal/scenarios` compares every fault with `normal` for the same request.
 
-One scenario is a variant rather than a single change from `normal`: `ignore-range-no-length` is `ignore-range` with different message framing. Compared with `normal` it differs, for a satisfiable Range, in status, `Content-Range`, `Content-Length`, body and framing; where `normal` already answers 200 (invalid or multiple ranges, an `If-Range` mismatch) only `Content-Length` and framing differ. Compared with `ignore-range` it differs only in `Content-Length` and framing. Both comparisons are asserted (`TestOneChangeAtATime`, `TestFramingVariant`).
+One scenario is a variant rather than a single change from `normal`: `ignore-range-no-length` is `ignore-range` with different message framing. Compared with `normal` it differs, for a satisfiable Range, in status, `Content-Range`, `Content-Length`, body and framing; where `normal` already answers 200 (invalid or multiple ranges, an `If-Range` mismatch) only `Content-Length` and framing differ. Compared with `ignore-range` it differs only in `Content-Length` and framing. Both comparisons are asserted (`TestOneChangeAtATime`, `TestFramingVariant`). `gzip-full-200` is likewise `ignore-range` with the 200 gzip-coded; `TestOneChangeAtATime` pins its differences from `normal`.
 
 ## Three kinds of statement
 
@@ -34,6 +34,10 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 | `cors-missing` | no `Access-Control-*` headers | conforming HTTP; blocks browser reads (Fetch "CORS check") | n/a outside browsers |
 | `cors-wrong-origin` | `Access-Control-Allow-Origin: https://origin.invalid` | conforming HTTP; blocks browser reads | n/a outside browsers |
 | `cors-no-expose` | no `Access-Control-Expose-Headers` | conforming; `ETag` and `Content-Range` are not CORS-safelisted response headers (Fetch) | n/a outside browsers; in browsers, cope with hidden headers |
+| `gzip-range-body` | body is the gzip of the requested bytes, `Content-Encoding: gzip`, `Content-Length` = compressed length, `Content-Range` unchanged (206) | deliberately invalid: with a content coding, "all other metadata about the representation is about the coded form" (§8.4), so `Content-Range` names bytes of the gzip representation (§14.4), and §15.3.7 requires the content to consist of that range; the body is a separate gzip stream of a different length | reject: the body length differs from the `Content-Range` span (§15.3.7). A client that decodes the body and gets the right bytes relies on a response RFC 9110 does not define; the RFC does not say whether it may |
+| `gzip-full-200` | Range ignored: 200 with the gzip of the whole file, `Content-Encoding: gzip`, compressed `Content-Length` (GET with Range) | valid but unusual: §14.2 permits ignoring Range; with no `Accept-Encoding` "any content coding is considered acceptable" (§12.5.3). The scenario also compresses when the request says `Accept-Encoding: identity`, where §12.5.3 says the server SHOULD send no coding | decode the gzip (§8.4), then as `ignore-range`: slice the full body or fail explicitly; never slice or parse the coded bytes |
+| `encoding-label-only` | `Content-Encoding: gzip` added; body, `Content-Length` and `Content-Range` as `normal` (206) | invalid by the lab's reading of §8.4 (the header states a coding that was not applied). RFC 9110 has no separate requirement tying the content to the label, and a client holding only a 206 fragment of the claimed coded form cannot check it | fail with an error that names `Content-Encoding` (lab recommendation): per §8.4 and §15.3.7 a coded 206 carries bytes of the coded form, which PMTiles offsets do not address. RFC 9110 does not say what a client does with a coded 206 |
+| `gzip-unrequested` | as `gzip-range-body`, only for requests with no `Accept-Encoding` header; any `Accept-Encoding` (including `identity`) gets `normal` (206) | deliberately invalid, as `gzip-range-body`. Choosing gzip is itself permitted: no `Accept-Encoding` means any coding is acceptable (§12.5.3) | send `Accept-Encoding: identity` on range requests (§12.5.3; lab recommendation), which avoids it; otherwise as `gzip-range-body` |
 
 ## Observed: the lab probe
 
@@ -55,6 +59,10 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 | `slow-headers` | fail `timeout` at request 1 (probe default 5 s; the test uses a 0.5 s request timeout against a 10 s server delay) |
 | `stall-body` | fail `timeout` at request 1 (same timeouts) |
 | `cors-*` (3) | pass (not a browser) |
+| `gzip-range-body` | fail `length_mismatch` at request 1 (the compressed body is shorter than the `Content-Range` span) |
+| `gzip-full-200` | fail `archive_invalid` (`bad_magic`: gzip magic where `PMTiles` is expected), attributed to the first 200, 1 warning |
+| `encoding-label-only` | pass, 9 requests: the probe does not read `Content-Encoding` (differs from the lab recommendation) |
+| `gzip-unrequested` | fail `length_mismatch` at request 1: the probe sends no `Accept-Encoding` |
 
 ## Observed: three third-party readers
 
@@ -101,6 +109,25 @@ Notes on the observations:
   * *Source:* for 206 responses, none of the three reads `Content-Range`. pmtiles.js reads it only for a 416 answer at offset 0. go-pmtiles checks only the status. pmtiles-rs requires status 206 and a body of exactly the requested length. References are in [results/README.md](results/README.md#go-pmtiles-1312-and-pmtiles-rs-0240).
 * **pmtiles-rs** requires 206 and a body of exactly the requested length. It therefore rejects `status-200-partial-body`, `ignore-range`, `overlong-body`, `expanded-range` and the conforming `short-range`, and never requests the remainder of a short 206. It accepts the shifted `Content-Range`, and it compares ETags on tile reads.
 
+## Observed: Content-Encoding scenarios, three readers
+
+The four `Content-Encoding` scenarios × `root-none`, `root-gzip`, `leaves-gzip` were run on 2026-09-28 through the same three readers, entry points and harnesses as the table above, with `pmtiles-lab` built from this change. Raw rows (one per scenario × fixture) and provenance: [results/content-encoding.md](results/content-encoding.md). All three fixtures gave the same result in every cell.
+
+| Scenario | pmtiles npm 4.5.0 | go-pmtiles 1.31.2 (`tile`) | pmtiles-rs 0.24.0 |
+|---|---|---|---|
+| `gzip-range-body` | reads tiles | error: "magic number not detected" | error: "Invalid magic number" |
+| `gzip-full-200` | error: "Server returned no content-length header or content-length exceeding request ..." | error: "magic number not detected" | error: "Range requests unsupported" |
+| `encoding-label-only` | error: "TypeError: terminated" | reads tiles | reads tiles |
+| `gzip-unrequested` | reads tiles | error: "magic number not detected" | error: "Invalid magic number" |
+
+No reader returned wrong tile data and none crashed.
+
+Notes on the observations:
+
+* **pmtiles npm runs on Node's `fetch`.** On a Range request Node 22.22.2's `fetch` sends `Accept-Encoding: identity` (checked against a local listener; recorded in the provenance file). Under `gzip-unrequested` it therefore got the `normal` response, which is why it reads tiles there. Under `gzip-range-body`, where the server compresses regardless, `fetch` decoded each gzip body and pmtiles.js received the right bytes. Under `encoding-label-only` it failed on the first response with `TypeError: terminated`, consistent with `fetch` failing to gunzip an identity body (not traced into undici's source).
+* **go-pmtiles and pmtiles-rs send no `Accept-Encoding` on range requests** (the rows show they received the coded body under `gzip-unrequested`, which the lab codes only when the header is absent) and do not decode. Both read the gzip bytes as the archive header and stop at the magic number, which is an explicit error, not wrong data. Under `encoding-label-only` both ignore the header and read correct tiles.
+* **`gzip-full-200`:** go-pmtiles accepts the 200 and parses the coded body as the header (compare its `ignore-range` crash, where the body is uncoded). pmtiles-rs rejects any 200 ("Range requests unsupported"), as under `ignore-range`.
+
 ## Boundary cases
 
 Two cases added in generator 0.3.0 isolate the size and framing of the first response.
@@ -130,6 +157,9 @@ Only the observations that conflict with a requirement are listed. Everything el
 | pmtiles-rs and pmtiles.js error on `ignore-range` | none | conforming (explicit failure) |
 | go-pmtiles does not flag the ETag change | none: consistency across requests is left to the client | differs from the lab recommendation |
 | no reader times out on `slow-headers` | none | differs from the lab recommendation |
+| pmtiles.js reads tiles under `gzip-range-body` (its `fetch` decodes each coded 206) | §8.4, §15.3.7 | the server is at fault; the client does not detect it. RFC 9110 does not say whether a client may decode such a body |
+| go-pmtiles and pmtiles-rs read tiles under `encoding-label-only` | none: RFC 9110 does not say what a client does with a coded 206 | differs from the lab recommendation |
+| go-pmtiles and pmtiles-rs error on `gzip-range-body`, `gzip-unrequested` and `gzip-full-200`; pmtiles.js errors on `gzip-full-200` and `encoding-label-only` | none | explicit failure; the error text names the magic number or byte serving, not `Content-Encoding` |
 
 These are observations of specific versions through specific entry points. They are not claims about other versions or other APIs of the same projects.
 
