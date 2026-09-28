@@ -16,11 +16,12 @@ Status: generator 0.4.0. Every push to `main` that passes CI publishes a `v0.4.N
 
 Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
-Observations from running three independent readers through the original 15 scenarios and 3 valid fixtures on 2026-09-26 (the two cases added in 0.3.0 were not part of that run): pmtiles npm 4.5.0 (`FetchSource`), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
+Observations from running three independent readers through all 20 scenarios and 4 valid fixtures on 2026-09-28 (reproducing every row of the first, 15 × 3 run of 2026-09-26): pmtiles npm 4.5.0 (`FetchSource`, on Node and in headless Chromium 141), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
 
 * **Silent wrong bytes.** pmtiles.js and go-pmtiles `tile` returned wrong tile bytes without an error under `short-range`, `expanded-range` and `overlong-body`. The first two are valid server responses (RFC 9110 §15.3.7, §14.2), and a client MUST inspect `Content-Range` on a 206.
-* **go-pmtiles crash.** go-pmtiles 1.31.2 `tile` exits with a nil-pointer panic on a gzip archive when the server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2). A `go-pmtiles serve` process backed by such a server crashed the same way. Raw evidence: [docs/results/go-pmtiles-1.31.2-ignore-range.txt](docs/results/go-pmtiles-1.31.2-ignore-range.txt).
+* **go-pmtiles crash.** go-pmtiles 1.31.2 `tile` exits with a nil-pointer panic on a gzip archive when the server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2), with or without `Content-Length`. A `go-pmtiles serve` process backed by such a server crashed the same way. Raw evidence: [docs/results/go-pmtiles-1.31.2-ignore-range.txt](docs/results/go-pmtiles-1.31.2-ignore-range.txt).
 * **pmtiles-rs strictness.** pmtiles-rs 0.24.0 requires a 206 whose body is exactly the requested length. It therefore rejects 200 responses, over-long bodies and the conforming short 206, and does not request the remainder.
+* **Content-Encoding depends on the HTTP client.** Chromium and Node `fetch` send `Accept-Encoding: identity` on Range requests; go-pmtiles and pmtiles-rs send none. The same pmtiles.js build reads tiles from a gzip-coded 206 on Node (which decodes it) and fails on it in Chromium (`net::ERR_CONTENT_DECODING_FAILED`).
 * **Content-Range.** All three accepted a 206 whose `Content-Range` was shifted by one byte while the body was correct. Their sources show that none of them reads `Content-Range` on a 206.
 
 ## Quick start
@@ -143,11 +144,13 @@ Ready-made harnesses:
 * [examples/pmtiles-js/run-scenarios.mjs](examples/pmtiles-js/run-scenarios.mjs) runs the `pmtiles` npm package against every scenario and fixture and prints one JSON row each.
 * [examples/cli-readers/run-scenarios.mjs](examples/cli-readers/run-scenarios.mjs) does the same for any command-line reader that prints one tile's bytes: `--cmd 'go-pmtiles tile {url} {z} {x} {y}'`, or the Rust wrapper in [examples/pmtiles-rs](examples/pmtiles-rs) (`cd examples/pmtiles-rs && cargo build --release --locked`; `target/` is ignored). Versions and exact commands for the committed results: [docs/results/README.md](docs/results/README.md).
 * [examples/pmtiles-js/browser-cors.mjs](examples/pmtiles-js/browser-cors.mjs) checks CORS in headless Chromium from a second origin.
+* [examples/pmtiles-js/browser-matrix.mjs](examples/pmtiles-js/browser-matrix.mjs) runs the `pmtiles` npm package inside a Playwright browser (`--browser chromium|firefox|webkit`) from a second origin against every scenario and fixture, one JSON row each. `--accept-encoding` prints the raw request head the browser sends for a cross-origin `fetch` with `Range`.
 
 ```sh
 cd examples/pmtiles-js && npm ci
 node run-scenarios.mjs --base http://127.0.0.1:8080 --manifest ../../fixtures/manifest.json
 node browser-cors.mjs --base http://127.0.0.1:8080   # needs a Playwright Chromium
+node browser-matrix.mjs --base http://127.0.0.1:8080 --manifest ../../fixtures/manifest.json --browser chromium
 ```
 
 ## Commands
@@ -233,11 +236,11 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 * **Tile types:** the conformance fixtures are PNG and are compared as stored. The shared corpus is MVT (points only, one layer); `tilecheck` decodes MVT but is not a general vector tile validator (no clipping, winding or geometry validity checks).
 * **MBTiles:** `serve-xyz` reads `pbf` tilesets only (png, jpg, webp and others are refused). It checks the `format` and `json`/`vector_layers` metadata it needs, not the whole MBTiles specification. No UTFGrid, no multiple tilesets, no caching headers, no HTTPS.
 * **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS. A 200 without `Content-Length` is covered only by `ignore-range-no-length` (chunked for HTTP/1.1; close-delimited for an HTTP/1.0 request, which net/http answers and a test covers); 206 responses always carry `Content-Length`.
-* **Browsers:** CORS behaviour is verified only in headless Chromium 141 via Playwright 1.56.1. Other browsers are unverified.
+* **Browsers:** CORS behaviour, and pmtiles.js reads under all 20 scenarios, are verified only in headless Chromium 141 via Playwright 1.56.1. Firefox and WebKit were not run (their Playwright builds could not be downloaded where the results were produced) and are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.
 * **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). On macOS (`macos-latest`, Apple silicon) it runs the CLI smoke test only, not the Go test suite. The CGO-free release binaries are smoke-tested natively on linux/amd64, windows/amd64 and darwin/arm64 (darwin/amd64 too if the runner has Rosetta 2); linux/arm64 is built but not launched. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.
-* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The scenario matrices cover the original 15 scenarios and 3 valid fixtures only; `exact-8192` was read by go-pmtiles and pmtiles-rs under `normal` only, and no third-party reader has been run against `ignore-range-no-length`. The four `Content-Encoding` scenarios were run separately (2026-09-28) through the same three readers on the same 3 fixtures ([docs/results/content-encoding.md](docs/results/content-encoding.md)).
-* **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It is not a production client.
+* **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The current matrices (2026-09-28) cover all 20 scenarios × all 4 valid fixtures for pmtiles npm 4.5.0 (Node and headless Chromium 141), go-pmtiles 1.31.2 and pmtiles-rs 0.24.0, including `ignore-range-no-length` and `exact-8192`; the earlier 15 × 3 matrices are kept as the historical record and were reproduced row for row. No browser other than that Chromium build was run.
+* **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It sends `Accept-Encoding: identity` and fails on any coded 200 or 206 (`content_encoding`) rather than decoding. It is not a production client.
 
 ## Development
 
@@ -261,7 +264,7 @@ Without a C compiler `go test -race` cannot run; the script stops with a hint ra
 Manual checks that need registries, not run in CI:
 
 * `scripts/oracle-go-pmtiles.sh`: the independent go-pmtiles oracle.
-* `examples/pmtiles-js`: the third-party client matrix and the browser CORS check.
+* `examples/pmtiles-js`: the third-party client matrix, the browser matrix and the browser CORS check.
 
 Layout and ownership: [docs/architecture.md](docs/architecture.md). Contract: [docs/plan.md](docs/plan.md). Spec mapping: [docs/conformance.md](docs/conformance.md). Changes: [CHANGELOG.md](CHANGELOG.md). Releases: [docs/release-proposal.md](docs/release-proposal.md).
 

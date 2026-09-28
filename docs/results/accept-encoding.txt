@@ -2,7 +2,8 @@
 #
 # Recorded 2026-09-28 on Ubuntu 24.04.4 LTS, Linux 6.18 x86_64, with the raw loopback
 # listener in examples/pmtiles-js/browser-matrix.mjs (it prints each request head verbatim,
-# up to the blank line, and answers a 16-byte 206). The lab trace does not record
+# up to the blank line, and answers a 16-byte 206; lines end CRLF on the wire and are stored
+# here with LF). The lab trace does not record
 # Accept-Encoding, which is why a raw listener is used.
 #
 # Browser (page on a second loopback origin, cross-origin fetch with Range: bytes=0-15):
