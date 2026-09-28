@@ -1,0 +1,68 @@
+# Accept-Encoding sent on a Range request, per client
+#
+# Recorded 2026-09-28 on Ubuntu 24.04.4 LTS, Linux 6.18 x86_64, with the raw loopback
+# listener in examples/pmtiles-js/browser-matrix.mjs (it prints each request head verbatim,
+# up to the blank line, and answers a 16-byte 206). The lab trace does not record
+# Accept-Encoding, which is why a raw listener is used.
+#
+# Browser (page on a second loopback origin, cross-origin fetch with Range: bytes=0-15):
+#   node browser-matrix.mjs --browser chromium --accept-encoding
+# Other clients, one request each through their normal entry point, against
+#   node browser-matrix.mjs --raw-listener 18450
+# (URL http://127.0.0.1:18450/archive.pmtiles; each client then fails on the 16-byte body,
+# which is expected: only the request matters here.)
+#
+# Not run: firefox and webkit. Playwright 1.56.1's builds could not be downloaded
+# (cdn.playwright.dev and playwright.download.prss.microsoft.com are blocked by the
+# session's egress policy, HTTP 403), and none is preinstalled.
+#
+# Summary: chromium 141.0.7390.37 and Node 22.22.2 fetch send "Accept-Encoding: identity";
+# go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 send no Accept-Encoding header.
+
+## chromium: node browser-matrix.mjs --browser chromium --accept-encoding
+# chromium 141.0.7390.37, page origin http://127.0.0.1:40141, cross-origin fetch with Range: bytes=0-15 -> 206 16
+GET /archive.pmtiles HTTP/1.1
+Host: 127.0.0.1:45409
+Connection: keep-alive
+sec-ch-ua-platform: "Linux"
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36
+sec-ch-ua: "HeadlessChrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"
+Range: bytes=0-15
+sec-ch-ua-mobile: ?0
+Accept: */*
+Origin: http://127.0.0.1:40141
+Sec-Fetch-Site: same-site
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://127.0.0.1:40141/
+Accept-Encoding: identity
+
+## node v22.22.2: pmtiles 4.5.0 FetchSource(URL).getHeader()
+client error: Wrong magic number for PMTiles archive
+raw listener on http://127.0.0.1:18450
+GET /archive.pmtiles HTTP/1.1
+host: 127.0.0.1:18450
+connection: keep-alive
+range: bytes=0-16383
+accept: */*
+accept-language: *
+sec-fetch-mode: cors
+user-agent: node
+accept-encoding: identity
+
+## go-pmtiles 1.31.2: go-pmtiles tile URL 0 0 0
+2026/09/28 22:15:05 main.go:145: Failed to show tile, Failed to read archive.pmtiles, magic number not detected. confirm this is a PMTiles archive
+(exit 1)
+GET /archive.pmtiles HTTP/1.1
+Host: 127.0.0.1:18450
+User-Agent: Go-http-client/1.1
+Range: bytes=0-16383
+
+## pmtiles-rs 0.24.0: examples/pmtiles-rs wrapper (HttpBackend, reqwest::Client::new()) URL 0 0 0
+Invalid header
+(exit 1)
+GET /archive.pmtiles HTTP/1.1
+range: bytes=0-16383
+accept: */*
+host: 127.0.0.1:18450
+
