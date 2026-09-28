@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Four new scenarios, appended after `cors-no-expose`, covering `Content-Encoding` on PMTiles range responses: `gzip-range-body`, `gzip-full-200`, `encoding-label-only`, `gzip-unrequested` (20 scenarios in all). Existing scenario names and behaviour, fixtures, schema identifiers, CLI flags and exit codes are unchanged. The trace fields are unchanged; `Accept-Encoding` is read by `gzip-unrequested` but not recorded.
+* Probe: every request sends `Accept-Encoding: identity`, and a 200 or 206 with a `Content-Encoding` other than absent or `identity` fails with the new failure code `content_encoding` (checked before length and `Content-Range`; the probe never decodes). The code is additive: the schema stays `pmtiles-lab-probe/1` and exit codes are unchanged. Probe results change only for the Content-Encoding scenarios: `gzip-range-body`, `gzip-full-200` and `encoding-label-only` fail `content_encoding` at request 1, and `gzip-unrequested` passes.
 * Tests: table tests per new scenario, `TestGzipUnrequestedVariant`, and the probe matrix now covers 4 archives × 20 scenarios.
 * Evidence: pmtiles npm 4.5.0, go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 run against the four scenarios × 3 valid fixtures ([docs/results/content-encoding.md](docs/results/content-encoding.md)).
 

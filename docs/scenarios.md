@@ -59,10 +59,12 @@ A 200 answer to a Range request is not invalid in itself: RFC 9110 §14.2 lets a
 | `slow-headers` | fail `timeout` at request 1 (probe default 5 s; the test uses a 0.5 s request timeout against a 10 s server delay) |
 | `stall-body` | fail `timeout` at request 1 (same timeouts) |
 | `cors-*` (3) | pass (not a browser) |
-| `gzip-range-body` | fail `length_mismatch` at request 1 (the compressed body is shorter than the `Content-Range` span) |
-| `gzip-full-200` | fail `archive_invalid` (`bad_magic`: gzip magic where `PMTiles` is expected), attributed to the first 200, 1 warning |
-| `encoding-label-only` | pass, 9 requests: the probe does not read `Content-Encoding` (differs from the lab recommendation) |
-| `gzip-unrequested` | fail `length_mismatch` at request 1: the probe sends no `Accept-Encoding` |
+| `gzip-range-body` | fail `content_encoding` at request 1 |
+| `gzip-full-200` | fail `content_encoding` at request 1 |
+| `encoding-label-only` | fail `content_encoding` at request 1 (the lab recommendation) |
+| `gzip-unrequested` | pass, 9 requests: the probe sends `Accept-Encoding: identity`, so the lab answers as `normal` |
+
+**Content-Encoding policy.** Every probe request sends `Accept-Encoding: identity` (RFC 9110 §12.5.3). A 200 or 206 whose `Content-Encoding` is present and names anything other than `identity` fails with `content_encoding`, before the length and `Content-Range` checks, so the error names the cause; the message gives the header value and the request number. The probe never decodes a body. Before this policy the probe sent no `Accept-Encoding`, ignored the header, and reported `length_mismatch` (`gzip-range-body`, `gzip-unrequested`), `archive_invalid` (`gzip-full-200`) and a pass (`encoding-label-only`).
 
 ## Observed: three third-party readers
 

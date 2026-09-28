@@ -20,15 +20,12 @@ import (
 // against every valid fixture. CORS scenarios pass because CORS is enforced
 // by browsers, not by HTTP clients; see examples/.
 //
-// Content-Encoding: every probe request carries Range, so no Accept-Encoding
-// is sent (the CLI's transport sets DisableCompression; Go's default one
-// adds it only without Range) and nothing is decoded: the probe reads the
-// coded bytes as they are. gzip-range-body and gzip-unrequested fail
-// length_mismatch (the compressed body is shorter than the Content-Range
-// span); gzip-full-200 fails archive_invalid (bad_magic: gzip magic where
-// "PMTiles" is expected), attributed to the suspicious first 200 (request 0,
-// one warning); encoding-label-only passes, because the probe ignores the
-// Content-Encoding label and the bytes are the right ones.
+// Content-Encoding: every probe request sends Accept-Encoding: identity and
+// nothing is decoded. A 200 or 206 with any other Content-Encoding fails
+// content_encoding at that request, before the length and Content-Range
+// checks: gzip-range-body, gzip-full-200 and encoding-label-only fail at
+// request 1. gzip-unrequested passes, because the lab codes only requests
+// with no Accept-Encoding.
 //
 // Ordinary scenarios run with the default 5 s request timeout, so a loaded
 // machine cannot turn a pass into a timeout. The timing scenarios hold the
@@ -62,10 +59,10 @@ func TestScenarioReports(t *testing.T) {
 		{"root-none", "cors-missing", "pass", 9, 0, nil},
 		{"root-none", "cors-wrong-origin", "pass", 9, 0, nil},
 		{"root-none", "cors-no-expose", "pass", 9, 0, nil},
-		{"root-none", "gzip-range-body", "fail", 1, 0, []fail{{FailLength, 1}}},
-		{"root-none", "gzip-full-200", "fail", 1, 1, []fail{{FailArchive, 0}}},
-		{"root-none", "encoding-label-only", "pass", 9, 0, nil},
-		{"root-none", "gzip-unrequested", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"root-none", "gzip-range-body", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-none", "gzip-full-200", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-none", "encoding-label-only", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-none", "gzip-unrequested", "pass", 9, 0, nil},
 
 		{"root-gzip", "normal", "pass", 9, 0, nil},
 		{"root-gzip", "wrong-content-range", "fail", 1, 0, []fail{{FailContentRange, 1}}},
@@ -83,10 +80,10 @@ func TestScenarioReports(t *testing.T) {
 		{"root-gzip", "cors-missing", "pass", 9, 0, nil},
 		{"root-gzip", "cors-wrong-origin", "pass", 9, 0, nil},
 		{"root-gzip", "cors-no-expose", "pass", 9, 0, nil},
-		{"root-gzip", "gzip-range-body", "fail", 1, 0, []fail{{FailLength, 1}}},
-		{"root-gzip", "gzip-full-200", "fail", 1, 1, []fail{{FailArchive, 0}}},
-		{"root-gzip", "encoding-label-only", "pass", 9, 0, nil},
-		{"root-gzip", "gzip-unrequested", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"root-gzip", "gzip-range-body", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-gzip", "gzip-full-200", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-gzip", "encoding-label-only", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"root-gzip", "gzip-unrequested", "pass", 9, 0, nil},
 
 		// leaves-gzip is 29229 bytes: the first response covers bytes
 		// 0-16383 only, and a 200 body of exactly 16384 bytes is suspect.
@@ -106,10 +103,10 @@ func TestScenarioReports(t *testing.T) {
 		{"leaves-gzip", "cors-missing", "pass", 27, 0, nil},
 		{"leaves-gzip", "cors-wrong-origin", "pass", 27, 0, nil},
 		{"leaves-gzip", "cors-no-expose", "pass", 27, 0, nil},
-		{"leaves-gzip", "gzip-range-body", "fail", 1, 0, []fail{{FailLength, 1}}},
-		{"leaves-gzip", "gzip-full-200", "fail", 1, 1, []fail{{FailArchive, 0}}},
-		{"leaves-gzip", "encoding-label-only", "pass", 27, 0, nil},
-		{"leaves-gzip", "gzip-unrequested", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"leaves-gzip", "gzip-range-body", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"leaves-gzip", "gzip-full-200", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"leaves-gzip", "encoding-label-only", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"leaves-gzip", "gzip-unrequested", "pass", 27, 0, nil},
 
 		// exact-8192: the opening request is answered with the whole file
 		// (bytes 0-8191/8192), then one range request per present tile.
@@ -129,10 +126,10 @@ func TestScenarioReports(t *testing.T) {
 		{"exact-8192", "cors-missing", "pass", 5, 0, nil},
 		{"exact-8192", "cors-wrong-origin", "pass", 5, 0, nil},
 		{"exact-8192", "cors-no-expose", "pass", 5, 0, nil},
-		{"exact-8192", "gzip-range-body", "fail", 1, 0, []fail{{FailLength, 1}}},
-		{"exact-8192", "gzip-full-200", "fail", 1, 1, []fail{{FailArchive, 0}}},
-		{"exact-8192", "encoding-label-only", "pass", 5, 0, nil},
-		{"exact-8192", "gzip-unrequested", "fail", 1, 0, []fail{{FailLength, 1}}},
+		{"exact-8192", "gzip-range-body", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"exact-8192", "gzip-full-200", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"exact-8192", "encoding-label-only", "fail", 1, 0, []fail{{FailEncoding, 1}}},
+		{"exact-8192", "gzip-unrequested", "pass", 5, 0, nil},
 	}
 	if len(cases) != 4*len(scenarios.All()) {
 		t.Fatalf("%d cases for 4 archives x %d scenarios", len(cases), len(scenarios.All()))
