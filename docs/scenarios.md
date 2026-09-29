@@ -169,42 +169,44 @@ Two cases added in generator 0.3.0 isolate the size and framing of the first res
 
 ## Observed: pmtiles.js in browsers
 
-All 20 scenarios × the 4 valid fixtures were run on 2026-09-28 with pmtiles npm 4.5.0 inside headless Chromium 141.0.7390.37 (Playwright 1.56.1's build), through `examples/pmtiles-js/browser-matrix.mjs`: the page is on a second loopback origin, so every archive read is a cross-origin `fetch`, and each (scenario, fixture) gets its own `PMTiles` instance with `FetchSource`. Server `--delay 2s`, harness timeout 1 s. Raw rows: [results/browser-chromium-141.0.7390.37-pmtiles-js-4.5.0.jsonl](results/browser-chromium-141.0.7390.37-pmtiles-js-4.5.0.jsonl); provenance in [results/README.md](results/README.md#browser-matrix).
-
-Firefox and WebKit were **not run**: Playwright's browser downloads were blocked by the network policy of the environment that produced these results.
+All 20 scenarios × the 4 valid fixtures were run with pmtiles npm 4.5.0 inside three headless browsers, Playwright 1.56.1's own builds: Chromium 141.0.7390.37 (2026-09-28), Firefox 142.0.1 and WebKit 26.0 (2026-09-29). The harness is `examples/pmtiles-js/browser-matrix.mjs`. The page is on a second loopback origin, so every archive read is a cross-origin `fetch`, and each (scenario, fixture) gets its own `PMTiles` instance with `FetchSource`. Server `--delay 2s`, harness timeout 1 s. Raw rows: [Chromium](results/browser-chromium-141.0.7390.37-pmtiles-js-4.5.0.jsonl), [Firefox](results/browser-firefox-142.0.1-pmtiles-js-4.5.0.jsonl), [WebKit](results/browser-webkit-26.0-pmtiles-js-4.5.0.jsonl); provenance in [results/README.md](results/README.md#browser-matrix).
 
 A cell with one value means all four fixtures agreed; otherwise it lists root-none / root-gzip / leaves-gzip / exact-8192. The browser's own network error, when it reported one, is in parentheses. "Timeout" is the harness timeout.
 
-| Scenario | Chromium 141.0.7390.37 | Firefox | WebKit |
+| Scenario | Chromium 141.0.7390.37 | Firefox 142.0.1 | WebKit 26.0 |
 |---|---|---|---|
-| `normal` | reads tiles | not run | not run |
-| `wrong-content-range` | reads tiles | not run | not run |
-| `status-200-partial-body` | reads tiles | not run | not run |
-| `truncated-body` | error: "Failed to fetch" (`net::ERR_CONTENT_LENGTH_MISMATCH`) | not run | not run |
-| `overlong-body` | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "Failed to fetch" / **wrong data: 4 of 6** | not run | not run |
-| `expanded-range` | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "Failed to fetch" / **wrong data: 4 of 6** | not run | not run |
-| `short-range` | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "Failed to fetch" / **wrong data: 4 of 6** | not run | not run |
-| `ignore-range` | error: "Server returned no content-length header or content-length exceeding request ..." | not run | not run |
-| `ignore-range-no-length` | error: "Server returned no content-length header or content-length exceeding request ..." | not run | not run |
-| `always-416` | error: "Server returned non-matching ETag undefined after one retry ..." | not run | not run |
-| `etag-change` | reads tiles (2 extra requests) | not run | not run |
-| `slow-headers` | timeout | not run | not run |
-| `stall-body` | timeout (`net::ERR_CONTENT_LENGTH_MISMATCH` when the lab closes the stalled body) | not run | not run |
-| `cors-missing` | error: "Failed to fetch" (`net::ERR_FAILED`) | not run | not run |
-| `cors-wrong-origin` | error: "Failed to fetch" (`net::ERR_FAILED`) | not run | not run |
-| `cors-no-expose` | reads tiles | not run | not run |
-| `gzip-range-body` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | not run | not run |
-| `gzip-full-200` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | not run | not run |
-| `encoding-label-only` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | not run | not run |
-| `gzip-unrequested` | reads tiles | not run | not run |
+| `normal` | reads tiles | reads tiles | reads tiles |
+| `wrong-content-range` | reads tiles | reads tiles | reads tiles |
+| `status-200-partial-body` | reads tiles | reads tiles | reads tiles |
+| `truncated-body` | error: "Failed to fetch" (`net::ERR_CONTENT_LENGTH_MISMATCH`) | error: "Content-Length header of network response exceeds response Body" (`NS_ERROR_NET_PARTIAL_TRANSFER`) | error: "Load failed" (`Connection terminated unexpectedly`) |
+| `overlong-body` | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "Failed to fetch" / **wrong data: 4 of 6** | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "AbortError: The operation was aborted." / **wrong data: 4 of 6** | **wrong data: 8 of 11** / **wrong data: 8 of 11** / error: "Extra bytes past the end" / **wrong data: 4 of 6** |
+| `expanded-range` | as `overlong-body` | as `overlong-body` | as `overlong-body` |
+| `short-range` | as `overlong-body` | as `overlong-body` | as `overlong-body` |
+| `ignore-range` | error: "Server returned no content-length header or content-length exceeding request ..." | same | same |
+| `ignore-range-no-length` | error: "Server returned no content-length header or content-length exceeding request ..." | same | same |
+| `always-416` | error: "Server returned non-matching ETag undefined after one retry ..." | same | same |
+| `etag-change` | reads tiles (2 extra requests) | reads tiles (2 extra requests) | reads tiles (2 extra requests) |
+| `slow-headers` | timeout | timeout | timeout |
+| `stall-body` | timeout | timeout | timeout |
+| `cors-missing` | error: "Failed to fetch" (`net::ERR_FAILED`) | error: "NetworkError when attempting to fetch resource." | error: "Load failed" ("Origin ... is not allowed by Access-Control-Allow-Origin. Status code: 206") |
+| `cors-wrong-origin` | error: "Failed to fetch" (`net::ERR_FAILED`) | error: "NetworkError when attempting to fetch resource." | error: "Load failed" ("Origin ... is not allowed by Access-Control-Allow-Origin. Status code: 206") |
+| `cors-no-expose` | reads tiles | reads tiles | reads tiles |
+| `gzip-range-body` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | reads tiles | reads tiles |
+| `gzip-full-200` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | error: "Server returned no content-length header or content-length exceeding request ..." | error: "Server returned no content-length header or content-length exceeding request ..." |
+| `encoding-label-only` | error: "Failed to fetch" (`net::ERR_CONTENT_DECODING_FAILED`) | error: "Decoding failed." | reads tiles / reads tiles / error: "Failed to Decode Data." / reads tiles |
+| `gzip-unrequested` | reads tiles | reads tiles | reads tiles |
 
-No crash. Notes on the observations:
+No crash in any browser. The wrong-data cells are identical across the three browsers and Node, counts included, and so are the timeouts. Notes on the observations:
 
-* **Same library, different HTTP client.** Compared with pmtiles.js on Node 22 `fetch` ([results/pmtiles-js-4.5.0-gen0.4.jsonl](results/pmtiles-js-4.5.0-gen0.4.jsonl)) on `tiles_ok`, `tiles_wrong`, `requests`, `statuses` and `outcome`, Chromium differs in `cors-missing` and `cors-wrong-origin` (Node has no CORS and reads tiles), in `gzip-range-body` (Node decodes each coded 206 and reads tiles; Chromium fails at request 1) and in `gzip-full-200` (an error in both, but Chromium stops after 1 request, Node after 2). Only the error text differs under `truncated-body` (Node: "TypeError: terminated"), `encoding-label-only` (Node: "TypeError: terminated") and the three `leaves-gzip` rows below. Every wrong-data cell is identical to Node's, counts included.
-* **Content-Encoding in Chromium.** Chromium sends `Accept-Encoding: identity` on a `fetch` with a `Range` header ([results/accept-encoding.txt](results/accept-encoding.txt)), so `gzip-unrequested` gets the `normal` answer. Every response that carries `Content-Encoding: gzip` anyway (a coded 206, a coded 200, or a label on an identity body) fails in the network layer with `net::ERR_CONTENT_DECODING_FAILED` before pmtiles.js sees any bytes. For `gzip-range-body` and `gzip-full-200` the body is valid gzip, so the failure is not a decoding error in the ordinary sense; the rows record only the error text, not its cause in Chromium's source. The effect matches the lab recommendation (fail, never use the bytes), though the message names neither `Content-Encoding` nor the range.
-* **`leaves-gzip` under `overlong-body`, `expanded-range` and `short-range`:** "Failed to fetch" with no failed network request. pmtiles.js decompresses the misaligned leaf directory with the browser's `DecompressionStream` (`dist/esm/index.js`, function `P`), and the invalid gzip stream rejects with that `TypeError`. Node reported the same case as `TypeError` with no message.
+* **Same library, different HTTP client.** Compared with pmtiles.js on Node 22 `fetch` ([results/pmtiles-js-4.5.0-gen0.4.jsonl](results/pmtiles-js-4.5.0-gen0.4.jsonl)) on `tiles_ok`, `tiles_wrong`, `requests`, `statuses` and `outcome`, all three browsers differ in `cors-missing` and `cors-wrong-origin` (Node has no CORS and reads tiles). Chromium also differs in `gzip-range-body` (Node decodes each coded 206 and reads tiles; Chromium fails at request 1) and in `gzip-full-200` (an error in both, but Chromium stops after 1 request, Node after 2). WebKit also differs in `encoding-label-only`: it reads tiles on three fixtures and fails at request 2 on leaves-gzip, where Node fails at request 1. Firefox matches Node on all four Content-Encoding scenarios. Otherwise only the error text differs.
+* **Content-Encoding.** What each browser sends on a `fetch` with `Range` is in [results/accept-encoding.txt](results/accept-encoding.txt): Chromium and WebKit send `Accept-Encoding: identity`; Firefox sends `gzip, deflate, br, zstd, identity`. The lab's `gzip-unrequested` codes only requests with no `Accept-Encoding`, so all three read tiles there.
+  * *Chromium* fails every response that carries `Content-Encoding: gzip` (coded 206, coded 200, label on an identity body) in the network layer with `net::ERR_CONTENT_DECODING_FAILED`, before pmtiles.js sees any bytes. For `gzip-range-body` and `gzip-full-200` the body is valid gzip, so this is not a decoding error in the ordinary sense; the rows record the error text, not its cause in Chromium's source. The effect matches the lab recommendation (fail, never use the bytes), though the message names neither `Content-Encoding` nor the range.
+  * *Firefox* decodes each coded 206 (`gzip-range-body`: reads tiles, as on Node), passes the decoded 200 of `gzip-full-200` to pmtiles.js, which rejects it for its missing or oversized `Content-Length`, and fails `encoding-label-only` with "Decoding failed." because the body is not gzip.
+  * *WebKit* also decodes each coded 206 and behaves as Firefox under `gzip-full-200`. Under `encoding-label-only` it reads correct tiles on root-none, root-gzip and exact-8192, where the labelled bodies do not start with gzip magic, and fails on leaves-gzip at request 2, the leaf directory, whose bytes are themselves gzip (the archive's internal compression). That is consistent with WebKit decoding a gzip-labelled body only when it looks like gzip, so pmtiles.js then gets an already-decompressed directory and its own `DecompressionStream` rejects it ("Failed to Decode Data."). This is an inference from the rows; WebKit's source was not read.
+* **Preflight.** No browser sent a CORS preflight: no trace contains the lab's 204 answer to an `OPTIONS` request. pmtiles.js sends only a plain `bytes=a-b` `Range` header, a CORS-safelisted request header in the Fetch standard.
+* **`leaves-gzip` under `overlong-body`, `expanded-range` and `short-range`:** an error with no failed network request in any browser. pmtiles.js decompresses the misaligned leaf directory with the browser's `DecompressionStream` (`dist/esm/index.js`, function `P`), and the invalid gzip stream rejects: "Failed to fetch" (Chromium), "AbortError: The operation was aborted." (Firefox), "Extra bytes past the end." (WebKit). Node reported the same case as `TypeError` with no message.
 * **`cors-no-expose`:** pmtiles.js reads every tile although `ETag` and `Content-Range` are hidden; it does not need them on this path.
-* **`always-416`:** the 416 is reported as an ETag mismatch, as on Node.
+* **`always-416`:** the 416 is reported as an ETag mismatch everywhere, as on Node.
 
 ## Standards-based assessment
 
@@ -219,10 +221,11 @@ Only the observations that conflict with a requirement are listed. Everything el
 | pmtiles-rs and pmtiles.js error on `ignore-range` and `ignore-range-no-length` | none | conforming (explicit failure) |
 | go-pmtiles does not flag the ETag change | none: consistency across requests is left to the client | differs from the lab recommendation |
 | no reader times out on `slow-headers` | none | differs from the lab recommendation |
-| pmtiles.js on Node reads tiles under `gzip-range-body` (Node's `fetch` decodes each coded 206) | §8.4, §15.3.7 | the server is at fault; the client does not detect it. RFC 9110 does not say whether a client may decode such a body |
+| pmtiles.js on Node, Firefox and WebKit reads tiles under `gzip-range-body` (the HTTP client decodes each coded 206) | §8.4, §15.3.7 | the server is at fault; the client does not detect it. RFC 9110 does not say whether a client may decode such a body |
 | go-pmtiles and pmtiles-rs read tiles under `encoding-label-only` | none: RFC 9110 does not say what a client does with a coded 206 | differs from the lab recommendation |
 | go-pmtiles and pmtiles-rs error on `gzip-range-body`, `gzip-unrequested` and `gzip-full-200`; pmtiles.js errors on `gzip-full-200` and `encoding-label-only` | none | explicit failure; the error text names the magic number or byte serving, not `Content-Encoding` |
 | pmtiles.js in Chromium errors on `gzip-range-body`, `gzip-full-200` and `encoding-label-only` (`net::ERR_CONTENT_DECODING_FAILED`) | none: RFC 9110 does not say what a client does with a coded 206, and Chromium had sent `Accept-Encoding: identity` (§12.5.3) | explicit failure, matching the lab recommendation in effect; the page sees only "Failed to fetch" |
+| pmtiles.js in WebKit reads tiles under `encoding-label-only` on 3 of 4 fixtures | none: RFC 9110 does not say what a client does with a coded 206 | differs from the lab recommendation |
 
 These are observations of specific versions through specific entry points. They are not claims about other versions or other APIs of the same projects.
 
@@ -241,4 +244,4 @@ Strong ETag `"sha256-<first 16 hex of the file hash>"`, `Accept-Ranges: bytes`, 
 | `cors-wrong-origin` | 206 on the wire, `fetch` rejects | preflight fails; GET never sent |
 | `cors-no-expose` | 206 readable, `ETag` and `Content-Range` hidden | same |
 
-Chromium sent no preflight for a plain `bytes=a-b` Range header. This is consistent with the Fetch standard's CORS-safelisted `Range` request header. The browser matrix above adds pmtiles.js reads under all 20 scenarios in the same Chromium build. Browsers other than this Chromium build are not verified: Firefox and WebKit were not run.
+Chromium sent no preflight for a plain `bytes=a-b` Range header. This is consistent with the Fetch standard's CORS-safelisted `Range` request header. The browser matrix above adds pmtiles.js reads under all 20 scenarios in this Chromium build and in Firefox 142.0.1 and WebKit 26.0, none of which sent a preflight for pmtiles.js's plain Range requests. The raw `fetch` CORS check itself was run in Chromium only.

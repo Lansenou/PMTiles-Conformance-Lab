@@ -13,12 +13,13 @@
 # (URL http://127.0.0.1:18450/archive.pmtiles; each client then fails on the 16-byte body,
 # which is expected: only the request matters here.)
 #
-# Not run: firefox and webkit. Playwright 1.56.1's builds could not be downloaded
-# (cdn.playwright.dev and playwright.download.prss.microsoft.com are blocked by the
-# session's egress policy, HTTP 403), and none is preinstalled.
+# Chromium was recorded on 2026-09-28; Firefox 142.0.1 and WebKit 26.0 (Playwright 1.56.1 builds
+# firefox-1495 and webkit-2215) on 2026-09-29 with the same command and --browser firefox|webkit.
 #
-# Summary: chromium 141.0.7390.37 and Node 22.22.2 fetch send "Accept-Encoding: identity";
-# go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 send no Accept-Encoding header.
+# Summary: chromium 141.0.7390.37, webkit 26.0 and Node 22.22.2 fetch send
+# "Accept-Encoding: identity"; firefox 142.0.1 sends "Accept-Encoding: gzip, deflate, br, zstd,
+# identity" on a fetch with Range; go-pmtiles 1.31.2 and pmtiles-rs 0.24.0 send no
+# Accept-Encoding header.
 
 ## chromium: node browser-matrix.mjs --browser chromium --accept-encoding
 # chromium 141.0.7390.37, page origin http://127.0.0.1:40141, cross-origin fetch with Range: bytes=0-15 -> 206 16
@@ -37,6 +38,43 @@ Sec-Fetch-Mode: cors
 Sec-Fetch-Dest: empty
 Referer: http://127.0.0.1:40141/
 Accept-Encoding: identity
+
+## firefox: node browser-matrix.mjs --browser firefox --accept-encoding
+# firefox 142.0.1, page origin http://127.0.0.1:36415, cross-origin fetch with Range: bytes=0-15 -> 206 16
+GET /archive.pmtiles HTTP/1.1
+Host: 127.0.0.1:41381
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd, identity
+Referer: http://127.0.0.1:36415/
+Range: bytes=0-15
+Origin: http://127.0.0.1:36415
+Connection: keep-alive
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
+Priority: u=0
+Pragma: no-cache
+Cache-Control: no-cache
+
+## webkit: node browser-matrix.mjs --browser webkit --accept-encoding
+# webkit 26.0, page origin http://127.0.0.1:42273, cross-origin fetch with Range: bytes=0-15 -> 206 16
+GET /archive.pmtiles HTTP/1.1
+Range: bytes=0-15
+Origin: http://127.0.0.1:42273
+Referer: http://127.0.0.1:42273/
+Accept: */*
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15
+Pragma: no-cache
+Cache-Control: no-cache
+Accept-Encoding: identity
+Accept-Language: en-US
+Connection: Keep-Alive
+Host: 127.0.0.1:36835
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
 
 ## node v22.22.2: pmtiles 4.5.0 FetchSource(URL).getHeader()
 client error: Wrong magic number for PMTiles archive
