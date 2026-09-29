@@ -100,6 +100,7 @@ const (
 	FailStatus         = "unexpected_status"
 	FailContentRange   = "content_range_mismatch"
 	FailLength         = "length_mismatch"
+	FailEncoding       = "content_encoding"
 	FailTruncated      = "truncated_body"
 	FailBodyTooLarge   = "body_too_large"
 	FailETagChanged    = "etag_changed"
@@ -265,6 +266,9 @@ func (f *fetcher) get(off, n int64) ([]byte, error) {
 		return fail(FailTransport, "%v", err)
 	}
 	req.Header.Set("Range", r.Range)
+	// PMTiles offsets address the identity bytes, so ask for no content
+	// coding (RFC 9110 §12.5.3). A Go transport then decodes nothing.
+	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := f.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -290,6 +294,12 @@ func (f *fetcher) get(off, n int64) ([]byte, error) {
 		return fail(FailTruncated, "body ended after %d bytes: %v", len(body), err)
 	case int64(len(body)) > f.lim.MaxBodyBytes:
 		return fail(FailBodyTooLarge, "body exceeds %d bytes", f.lim.MaxBodyBytes)
+	}
+	// A coded 200 or 206 carries bytes of the coded form (RFC 9110 §8.4),
+	// which archive offsets do not address. Checked before length and
+	// Content-Range, so the failure names the cause. Never decoded.
+	if ce := contentEncoding(resp.Header); ce != "" && (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent) {
+		return fail(FailEncoding, "request %d: status %d with Content-Encoding %q; the probe sent Accept-Encoding: identity and does not decode", r.Seq, resp.StatusCode, ce)
 	}
 	if r.ContentLength != "" && r.ContentLength != strconv.Itoa(len(body)) {
 		return fail(FailLength, "Content-Length %s but body has %d bytes", r.ContentLength, len(body))
@@ -351,6 +361,18 @@ func (f *fetcher) get(off, n int64) ([]byte, error) {
 		return body[off:min(off+n, f.size)], nil
 	}
 	return fail(FailStatus, "status %d for %s", resp.StatusCode, r.Range)
+}
+
+// contentEncoding returns the Content-Encoding field value, or "" when it is
+// absent or names only identity.
+func contentEncoding(h http.Header) string {
+	v := strings.Join(h.Values("Content-Encoding"), ", ")
+	for _, c := range strings.Split(v, ",") {
+		if c = strings.TrimSpace(c); c != "" && !strings.EqualFold(c, "identity") {
+			return v
+		}
+	}
+	return ""
 }
 
 // parseContentRange parses "bytes a-b/size" with a <= b < size.

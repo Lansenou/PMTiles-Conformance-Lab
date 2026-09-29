@@ -2,8 +2,10 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,5 +76,54 @@ func TestSliceNormalAndWrongContentRange(t *testing.T) {
 	tr := rs.Trace()
 	if len(tr.Entries) != 1 || tr.Entries[0].ContentRange != "bytes 1-905/905" || tr.Entries[0].Status != 206 || !tr.Entries[0].Complete {
 		t.Fatalf("trace: %+v", tr.Entries)
+	}
+}
+
+// TestContentEncodingPolicy: every request asks for identity, an identity
+// label is accepted, and any other coding fails content_encoding naming the
+// header value and the request.
+func TestContentEncodingPolicy(t *testing.T) {
+	_, _, m := lab(t)
+	a := archive(t, m, "root-none")
+	files, _, _ := fixtures.Generate()
+	var data []byte
+	for _, f := range files {
+		if f.Path == a.File {
+			data = f.Bytes
+		}
+	}
+	for _, c := range []struct{ label, code string }{{"", ""}, {"identity", ""}, {"Identity", ""}, {"gzip", FailEncoding}, {"identity, br", FailEncoding}} {
+		var ae []string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ae = append(ae, r.Header.Values("Accept-Encoding")...)
+			start, end, _ := rangeserver.ParseRange(r.Header.Get("Range"), int64(len(data)))
+			if c.label != "" {
+				w.Header().Set("Content-Encoding", c.label)
+			}
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(data[start : end+1])
+		}))
+		rep := Run(context.Background(), http.DefaultClient, ts.URL+"/x.pmtiles", a, DefaultLimits())
+		ts.Close()
+		for _, v := range ae {
+			if v != "identity" {
+				t.Errorf("%q: request sent Accept-Encoding %q", c.label, v)
+			}
+		}
+		if len(ae) != len(rep.Requests) {
+			t.Errorf("%q: %d Accept-Encoding values for %d requests", c.label, len(ae), len(rep.Requests))
+		}
+		if c.code == "" {
+			if rep.Result != "pass" {
+				t.Errorf("%q: %+v", c.label, rep.Failures)
+			}
+			continue
+		}
+		if len(rep.Failures) != 1 || rep.Failures[0].Code != c.code || rep.Failures[0].Request != 1 ||
+			!strings.Contains(rep.Failures[0].Message, fmt.Sprintf("request 1: status 206 with Content-Encoding %q", c.label)) ||
+			rep.Requests[0].Error != c.code {
+			t.Errorf("%q: failures %+v", c.label, rep.Failures)
+		}
 	}
 }
