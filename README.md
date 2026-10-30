@@ -1,22 +1,37 @@
-# pmtiles-lab: PMTiles v3 conformance lab and tile delivery test tool
+# pmtiles-lab: test how your PMTiles reader handles a misbehaving server
 
-`pmtiles-lab` helps you test a [PMTiles v3](https://github.com/protomaps/PMTiles/blob/8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5/spec/v3/spec.md) reader that fetches archives over HTTP range requests. It gives you:
+## The problem
 
-1. **Fixtures:** small deterministic synthetic archives, valid and deliberately malformed, with a manifest of the expected lookup results (tile hashes and absolute byte ranges).
-2. **Fault server:** a loopback HTTP endpoint that serves raw archive bytes under a named scenario. Each fault changes exactly one thing: a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, gzip `Content-Encoding` on range responses, and more. One scenario, `ignore-range-no-length`, is a documented framing variant of `ignore-range` (no `Content-Length`).
-3. **Trace:** a bounded, machine-readable record of every request your client made and every byte the server sent.
-4. **Probe:** a reference client that runs the same checks and produces an exact JSON report.
-5. **Shared MVT corpus and XYZ path:** one small original vector tileset with known decoded features, packaged as PMTiles and as MBTiles with identical tile bytes. `serve-xyz` serves any PBF MBTiles file as TileJSON plus `/{z}/{x}/{y}.pbf`, and `tilecheck` fetches the corpus through either delivery path and compares the decoded features with the manifest ([below](#same-tiles-through-pmtiles-and-xyz)).
+A [PMTiles](https://github.com/protomaps/PMTiles/blob/8b8ddea4dbff1b0104cf2bebf2f7ff35c91b41d5/spec/v3/spec.md) map has no tile server. The reader fetches each tile straight out of one large archive file on ordinary web storage or a CDN, with HTTP range requests ("send me bytes 351-470").
 
-The lab is a development and CI tool. It is not a production tile server, map renderer, tile downloader, MBTiles validator or general PMTiles SDK. It uses no real map data and needs no network at test time.
+The file format is simple. The failures happen at the HTTP layer. Real storage backends, CDNs and proxies ignore `Range`, answer 416 for a valid range, change the ETag between two requests, cut a body short, gzip a range response, or strip CORS headers. Readers react to these differently, and often silently.
 
-Status: generator 0.4.0. Every push to `main` that passes CI publishes a `v0.4.N` release with binaries for five platforms ([docs/release-proposal.md](docs/release-proposal.md)). See [Limits and known gaps](#supported-unsupported-and-known-gaps).
+We ran three widely used readers through these cases:
 
-## Why
+- pmtiles.js and go-pmtiles returned wrong tile bytes without an error, even for responses the HTTP standard allows.
+- go-pmtiles also crashed on another allowed response.
+- pmtiles-rs rejected valid responses instead.
+- None of the three checks `Content-Range`.
 
-Most PMTiles bugs show up at the HTTP layer, not in the format. Storage backends and CDNs sometimes ignore `Range`, answer 416 for satisfiable ranges, change ETags between requests, cut bodies short or strip CORS headers. Readers often handle these cases silently and differently. The lab makes each behaviour reproducible on `127.0.0.1` so you can see exactly what your reader does. A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
+In production this shows up as a corrupt or missing tile on one CDN and not another, and it is hard to reproduce.
 
-Observations from running three independent readers through all 20 scenarios and 4 valid fixtures on 2026-09-28 and 2026-09-29 (reproducing every row of the first, 15 × 3 run of 2026-09-26): pmtiles npm 4.5.0 (`FetchSource`, on Node and in headless Chromium 141, Firefox 142 and WebKit 26), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers).
+## What the lab solves
+
+The lab makes each of these server behaviours reproducible on `127.0.0.1`. You can see what your reader does with each one before users hit it, in CI, with no network and no real map data. It provides:
+
+1. **Test archives with known answers.** These are small valid and deliberately broken PMTiles files. A manifest lists, for every tile, the expected bytes, their SHA-256 and the exact byte range they come from.
+2. **A fault server.** It serves those archives with one named misbehaviour at a time, for example a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, or gzip on a range response. There are 20 scenarios, and each is labelled as allowed or not allowed by HTTP ([docs/scenarios.md](docs/scenarios.md)).
+3. **A request trace.** It records every request your reader made and every byte the server sent, so you can trace a wrong tile to the exact request that produced it.
+4. **A reference client (`probe`).** It reads the same archives with strict checks and writes an exact JSON report of what a careful read looks like.
+5. **One tileset, two delivery paths.** The same small vector tileset ships as PMTiles and as MBTiles with identical tile bytes. `serve-xyz` serves the MBTiles copy as TileJSON plus `/{z}/{x}/{y}.pbf`. `tilecheck` decodes both paths and confirms they give the same map features ([below](#same-tiles-through-pmtiles-and-xyz)).
+
+It is a development and CI tool. It is not a production tile server, map renderer, tile downloader, MBTiles validator or general PMTiles SDK.
+
+Status: fixture generator 0.4.0. Every push to `main` that passes CI publishes a `v0.4.N` release with binaries for five platforms ([docs/release-proposal.md](docs/release-proposal.md)). See [Limits and known gaps](#supported-unsupported-and-known-gaps).
+
+## What it found in three readers
+
+The full findings, from runs on 2026-09-28 and 2026-09-29, are below. They cover pmtiles npm 4.5.0 (`FetchSource`, on Node and in headless Chromium 141, Firefox 142 and WebKit 26), the go-pmtiles 1.31.2 `tile` command, and pmtiles-rs 0.24.0 (`HttpBackend`). Each reader ran through all 20 scenarios and all 4 valid fixtures. These runs reproduced every row of the first, 15 × 3 run of 2026-09-26. Details, raw rows and the standards-based assessment are in [docs/scenarios.md](docs/scenarios.md#observed-three-third-party-readers). A prior-art survey is in [docs/prior-art.md](docs/prior-art.md).
 
 * **Silent wrong bytes.** pmtiles.js and go-pmtiles `tile` returned wrong tile bytes without an error under `short-range`, `expanded-range` and `overlong-body`. The first two are valid server responses (RFC 9110 §15.3.7, §14.2), and a client MUST inspect `Content-Range` on a 206.
 * **go-pmtiles crash.** go-pmtiles 1.31.2 `tile` exits with a nil-pointer panic on a gzip archive when the server ignores Range and sends the full file with 200 (permitted by RFC 9110 §14.2), with or without `Content-Length`. A `go-pmtiles serve` process backed by such a server crashed the same way. Raw evidence: [docs/results/go-pmtiles-1.31.2-ignore-range.txt](docs/results/go-pmtiles-1.31.2-ignore-range.txt).
