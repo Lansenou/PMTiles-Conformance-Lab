@@ -20,13 +20,19 @@ import (
 )
 
 func cmdServeXYZ(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fset := newFlags("serve-xyz", "serve-xyz --mbtiles FILE [--addr 127.0.0.1:0] [--public-url URL]",
+	fset := newFlags("serve-xyz", "serve-xyz --mbtiles FILE [--scenario NAME] [--addr 127.0.0.1:0] [--public-url URL] [--delay 2s]",
 		`  pmtiles-lab serve-xyz --mbtiles fixtures/mvt/points.mbtiles
   pmtiles-lab serve-xyz --mbtiles my-vector-tiles.mbtiles --addr 127.0.0.1:8081
+  pmtiles-lab serve-xyz --mbtiles fixtures/mvt/points.mbtiles --scenario truncated-body
 
 URLs:
-  /tiles.json            TileJSON 3.0.0 with absolute tile URLs and vector_layers
-  /{z}/{x}/{y}.pbf       one tile (XYZ rows; converted to the MBTiles TMS tile_row)
+  /tiles.json                        TileJSON 3.0.0 with absolute tile URLs and vector_layers
+  /{z}/{x}/{y}.pbf                   one tile (XYZ rows; converted to the MBTiles TMS tile_row)
+  /scenarios/<name>/tiles.json       TileJSON under any scenario; its tile URLs keep the prefix
+  /scenarios/<name>/{z}/{x}/{y}.pbf  one tile under any scenario
+  GET /__lab/trace                   request trace (JSON)
+  POST /__lab/reset                  clear trace and scenario state
+  GET /__lab/scenarios               scenario list (JSON; also: pmtiles-lab scenarios --xyz)
 
 Only pbf (gzip-compressed MVT) MBTiles files are served. The file is opened
 read-only and never modified.
@@ -34,12 +40,20 @@ read-only and never modified.
 	file := fset.String("mbtiles", "", "MBTiles file with format pbf")
 	addr := fset.String("addr", "127.0.0.1:0", "listen address; port 0 picks a free port")
 	public := fset.String("public-url", "", "base URL for TileJSON tile URLs (default: http://<request Host>)")
+	scenario := fset.String("scenario", "normal", "default scenario (see: pmtiles-lab scenarios --xyz)")
+	delay := fset.Duration("delay", 2*time.Second, "how long stall-body stalls (max 10s)")
 	pos, err := parse(fset, args)
 	if err != nil {
 		return err
 	}
 	if *file == "" || len(pos) > 0 {
 		return usageError{"--mbtiles FILE is required and no positional arguments are accepted"}
+	}
+	if *delay < 0 || *delay > xyz.MaxDelay {
+		return usageError{fmt.Sprintf("--delay must be between 0 and %s", xyz.MaxDelay)}
+	}
+	if _, ok := xyz.LookupScenario(*scenario); !ok {
+		return usageError{fmt.Sprintf("unknown XYZ scenario %q (see: pmtiles-lab scenarios --xyz)", *scenario)}
 	}
 	if *public != "" {
 		if u, err := url.Parse(*public); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -60,14 +74,15 @@ read-only and never modified.
 		return err
 	}
 	base := "http://" + ln.Addr().String()
-	fmt.Fprintf(stdout, "serving %s (%s, zoom %d-%d) on %s\n", *file, f.Meta.Format, f.Meta.MinZoom, f.Meta.MaxZoom, base)
+	fmt.Fprintf(stdout, "serving %s (%s, zoom %d-%d) on %s (scenario %s)\n", *file, f.Meta.Format, f.Meta.MinZoom, f.Meta.MaxZoom, base, *scenario)
 	fmt.Fprintf(stdout, "tilejson: %s%s\n", base, xyz.TileJSONPath)
 	fmt.Fprintf(stdout, "tiles: %s/{z}/{x}/{y}.pbf\n", base)
+	fmt.Fprintf(stdout, "trace: %s/__lab/trace\n", base)
 	if o, ok := stdout.(*os.File); ok {
 		o.Sync()
 	}
-	hs := &http.Server{Handler: &xyz.Handler{File: f, PublicURL: *public}, ReadHeaderTimeout: 10 * time.Second,
-		MaxHeaderBytes: 16 << 10, WriteTimeout: 30 * time.Second}
+	hs := &http.Server{Handler: &xyz.Handler{File: f, PublicURL: *public, Scenario: *scenario, Delay: *delay},
+		ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16 << 10, WriteTimeout: xyz.MaxDelay + 20*time.Second}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errc := make(chan error, 1)

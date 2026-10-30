@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/tilecheck"
+	"github.com/lansenou/pmtiles-conformance-lab/internal/xyz"
 )
 
 // startCLI runs a serving command on port 0 and returns the URL printed after
@@ -92,6 +94,8 @@ func TestXYZUsage(t *testing.T) {
 	manifest := filepath.Join(dir, "manifest.json")
 	for _, args := range [][]string{
 		{"serve-xyz"}, {"serve-xyz", "x.mbtiles"}, {"serve-xyz", "--mbtiles", "x", "--public-url", "ftp://x"},
+		{"serve-xyz", "--mbtiles", "x", "--scenario", "truncated"}, {"serve-xyz", "--mbtiles", "x", "--delay", "11s"},
+		{"serve-xyz", "--mbtiles", "x", "--delay", "-1s"}, {"scenarios", "--xyz", "extra"},
 		{"tilecheck", "--manifest", manifest}, {"tilecheck", "--pmtiles", "a", "--tilejson", "http://b", "--manifest", manifest},
 		{"tilecheck", "--pmtiles", "a"}, {"tilecheck", "--tilejson", "file.json", "--manifest", manifest},
 	} {
@@ -108,5 +112,49 @@ func TestXYZUsage(t *testing.T) {
 	}
 	if code, out, _ := runCLI("version"); code != exitOK || !strings.HasPrefix(out, "pmtiles-lab dev (fixtures generator 0.5.0") {
 		t.Errorf("version: %q", out)
+	}
+}
+
+// TestServeXYZScenario lists the XYZ scenarios, serves the corpus under
+// absent-204 and checks that tilecheck passes and that the trace shows the
+// 204s.
+func TestServeXYZScenario(t *testing.T) {
+	code, out, _ := runCLI("scenarios", "--xyz")
+	if lines := strings.Split(strings.TrimSpace(out), "\n"); code != exitOK || len(lines) != 14 || !strings.HasPrefix(lines[0], "normal ") {
+		t.Errorf("scenarios --xyz: exit %d\n%s", code, out)
+	}
+	code, out, _ = runCLI("scenarios", "--xyz", "--json")
+	var list []xyz.Scenario
+	if err := json.Unmarshal([]byte(out), &list); err != nil || code != exitOK || len(list) != 14 || list[13].Validity != xyz.ValidHTTPInvalidContent {
+		t.Errorf("scenarios --xyz --json: exit %d %v\n%s", code, err, out)
+	}
+
+	dir, _ := generated(t)
+	trace, stop := startCLI(t, "trace: ", "serve-xyz", "--mbtiles", filepath.Join(dir, "mvt", "points.mbtiles"), "--addr", "127.0.0.1:0",
+		"--scenario", "absent-204")
+	defer stop()
+	base := strings.TrimSuffix(trace, "/__lab/trace")
+	code, out, stderr := runCLI("tilecheck", "--manifest", filepath.Join(dir, "manifest.json"), "--tilejson", base+xyz.TileJSONPath)
+	if code != exitOK {
+		t.Fatalf("tilecheck: exit %d\n%s%s", code, out, stderr)
+	}
+	resp, err := http.Get(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var tr xyz.Trace
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		t.Fatal(err)
+	}
+	statuses := map[int]int{}
+	for _, e := range tr.Entries {
+		if e.Scenario != "absent-204" {
+			t.Errorf("%+v", e)
+		}
+		statuses[e.Status]++
+	}
+	if statuses[200] != 8 || statuses[204] != 3 || len(tr.Entries) != 11 {
+		t.Errorf("statuses %v", statuses)
 	}
 }

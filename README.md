@@ -23,7 +23,7 @@ The lab makes each of these server behaviours reproducible on `127.0.0.1`. You c
 2. **A fault server.** It serves those archives with one named misbehaviour at a time, for example a wrong `Content-Range`, a truncated body, 200 instead of 206, a changed ETag, 416, missing CORS, or gzip on a range response. There are 20 scenarios, and each is labelled as allowed or not allowed by HTTP ([docs/scenarios.md](docs/scenarios.md)).
 3. **A request trace.** It records every request your reader made and every byte the server sent, so you can trace a wrong tile to the exact request that produced it.
 4. **A reference client (`probe`).** It reads the same archives with strict checks and writes an exact JSON report of what a careful read looks like.
-5. **One tileset, two delivery paths.** The same small vector tileset ships as PMTiles and as MBTiles with identical tile bytes. `serve-xyz` serves the MBTiles copy as TileJSON plus `/{z}/{x}/{y}.pbf`. `tilecheck` decodes both paths and confirms they give the same map features ([below](#same-tiles-through-pmtiles-and-xyz)).
+5. **One tileset, two delivery paths.** The same small vector tileset ships as PMTiles and as MBTiles with identical tile bytes. `serve-xyz` serves the MBTiles copy as TileJSON plus `/{z}/{x}/{y}.pbf`. `tilecheck` decodes both paths and confirms they give the same map features ([below](#same-tiles-through-pmtiles-and-xyz)). `serve-xyz` has 14 fault scenarios of its own, for example a 429, a gzip tile without its `Content-Encoding` label or a TMS `scheme` ([docs/xyz-scenarios.md](docs/xyz-scenarios.md)).
 
 It is a development and CI tool. It is not a production tile server, map renderer, tile downloader, MBTiles validator or general PMTiles SDK.
 
@@ -144,6 +144,8 @@ With `--json`, both print a `pmtiles-lab-tilecheck/1` report whose `tiles[]` ent
 
 * `GET /tiles.json`: TileJSON 3.0.0 with absolute tile URLs (from the request `Host`, or `--public-url`), zoom range, bounds, center and `vector_layers`.
 * `GET /{z}/{x}/{y}.pbf`: the stored tile with `Content-Type: application/vnd.mapbox-vector-tile` and `Content-Encoding: gzip`; decompressed if the request's `Accept-Encoding` excludes gzip. XYZ `y` is converted to `tile_row = 2^z - 1 - y`. 404 for a missing tile, 400 for coordinates outside the zoom level, 204 for an empty or NULL `tile_data`, and 500 when a coordinate has more than one row or a stored tile it must decompress is not valid gzip or inflates past 4 MiB.
+* `/scenarios/<name>/tiles.json` and `/scenarios/<name>/{z}/{x}/{y}.pbf`: the same under one of the [XYZ scenarios](#xyz-scenarios). `--scenario NAME` sets the scenario of unprefixed URLs (default `normal`).
+* `GET /__lab/trace`, `POST /__lab/reset`, `GET /__lab/scenarios`: the request trace, a reset of the trace and of `status-429-once`, and the scenario list. These are not traced.
 * Anything that is not a pbf MBTiles file is refused at startup with a clear message and exit 1: not SQLite, an empty or truncated file, no `metadata`, no `tiles` table or view, another `format`, or no `vector_layers`.
 
 ## Testing your own reader
@@ -153,6 +155,8 @@ With `--json`, both print a `pmtiles-lab-tilecheck/1` report whose `tiles[]` ent
 3. Before each run, `POST /__lab/reset` clears the trace and per-scenario state (for example the ETag counter in `etag-change`).
 4. After the run, `GET /__lab/trace` returns what your reader requested. Compare its ranges with `archive_offset`, `length` and `leaf_directory` in `fixtures/manifest.json`. Compare its tile bytes with the manifest `sha256`.
 5. Decide which outcome your reader should have for each scenario. [docs/scenarios.md](docs/scenarios.md) says which server responses are standards-conforming and what a robust client does.
+
+An XYZ client is tested the same way against `serve-xyz`, starting from `/scenarios/<name>/tiles.json` ([docs/xyz-scenarios.md](docs/xyz-scenarios.md#testing-your-own-client)).
 
 Ready-made harnesses:
 
@@ -178,8 +182,8 @@ Exit codes: `0` ok, `1` check failed (invalid archive or failing probe), `2` usa
 | `inspect ARCHIVE [--tile Z/X/Y]... [--json]` | Validate structure within the limits below; report the header and directory counts; resolve tiles as `present` (with hash and absolute range) or `absent`. A corrupt archive exits 1 with a stable `error.code`; an absent tile is not an error. |
 | `serve (--archive FILE \| --dir DIR) [--scenario NAME] [--addr 127.0.0.1:0] [--delay 2s]` | Serve raw bytes with range semantics and scenarios. Binds loopback by default. |
 | `probe --url URL --manifest FILE [--archive NAME] [--json] [--timeout 5s]` | Reference client; exact report of requests, response headers, body hashes, tile results, failures and warnings. |
-| `scenarios [--json]` | List scenario names, HTTP validity and descriptions. |
-| `serve-xyz --mbtiles FILE [--addr 127.0.0.1:0] [--public-url URL]` | Serve a PBF MBTiles file read-only as TileJSON plus `/{z}/{x}/{y}.pbf`. Binds loopback by default. |
+| `scenarios [--xyz] [--json]` | List scenario names, HTTP validity and descriptions; `--xyz` lists the `serve-xyz` scenarios. |
+| `serve-xyz --mbtiles FILE [--scenario NAME] [--addr 127.0.0.1:0] [--public-url URL] [--delay 2s]` | Serve a PBF MBTiles file read-only as TileJSON plus `/{z}/{x}/{y}.pbf`, with XYZ scenarios and a trace. Binds loopback by default. |
 | `tilecheck (--pmtiles FILE\|URL \| --tilejson URL) --manifest FILE [--json] [--timeout 30s]` | Fetch the manifest's MVT corpus through one path, decode every tile and compare features; exit 1 on any mismatch. |
 | `version` | CLI release version and fixture generator version. |
 
@@ -220,6 +224,29 @@ result: invalid: bad_magic: magic is "XMTiles", want "PMTiles"
 
 Full table with sources, lab recommendations, the probe's results, three third-party readers and Chromium results: [docs/scenarios.md](docs/scenarios.md).
 
+### XYZ scenarios
+
+14 scenarios for `serve-xyz`, a separate list. They change tile and TileJSON responses, not ranges.
+
+| Name | What changes | Response |
+|---|---|---|
+| `normal` | nothing | conforming |
+| `truncated-body` | tile connection closed after half the body | invalid framing |
+| `stall-body` | half the tile body, then a stall (`--delay`, max 10 s), then close | invalid framing |
+| `status-429-once` | first GET of each tile path gets 429, `Retry-After: 1` | valid |
+| `status-503` | every tile gets 503, `Retry-After: 1` | valid |
+| `absent-204` | missing tile: 204 instead of 404 | valid |
+| `absent-200-empty` | missing tile: empty 200 instead of 404 | valid |
+| `gzip-unlabelled` | gzip tile sent without `Content-Encoding` | valid HTTP; the body is not an MVT |
+| `encoding-label-only` | decompressed tile sent with `Content-Encoding: gzip` | invalid |
+| `double-gzip` | gzip tile gzipped again, one `Content-Encoding: gzip` | valid HTTP; the decoded body is not an MVT |
+| `cors-missing-tiles` | no `Access-Control-Allow-Origin` on tiles; TileJSON keeps it | valid HTTP; browsers block tile reads |
+| `tilejson-relative-tiles` | TileJSON `tiles` is a relative reference | invalid TileJSON (URLs MUST be absolute) |
+| `scheme-tms` | TileJSON `scheme: tms`, and the server reads `y` as the TMS row | valid |
+| `vector-layers-mismatch` | TileJSON `vector_layers` ids renamed; tiles unchanged | valid HTTP; TileJSON contradicts the tiles |
+
+Sources, lab recommendations and `tilecheck` results: [docs/xyz-scenarios.md](docs/xyz-scenarios.md).
+
 ## Fixtures
 
 Four valid archives (`root-none`, `root-gzip`, `leaves-gzip`, `exact-8192`), sixteen malformed ones and one unsupported one (zstd). They cover root-only and leaf lookups, an archive of exactly 8192 bytes whose 16 KiB opening request is answered with the whole file (`206`, `bytes 0-8191/8192`), contiguous and deduplicated offsets, run lengths, absent tiles, zoom 0-3 and 12, data beyond the first 16 KiB, bad magic/version, truncation, varint overflow, uint64 section overflow, a root beyond 16 KiB, empty and oversized directories, zero-length and out-of-bounds entries, a leaf cycle and a decompression bomb. Provenance and hashes: [docs/fixtures.md](docs/fixtures.md).
@@ -243,9 +270,10 @@ Independent readers verify the valid archives: go-pmtiles v1.31.2 (all 60 manife
 | `inspect` archive size | 64 MiB |
 | `probe` per-request / total timeout, requests, body size | 5 s / 30 s, 64, 1 MiB |
 | `serve-xyz` / `tilecheck` tile size | 4 MiB stored, 4 MiB decompressed; `tilecheck` total timeout 30 s |
+| `serve-xyz` trace entries / delay | 1024 (ring buffer, dropped count reported) / 10 s |
 | `serve` archive bytes / trace entries / delay | 64 MiB in total, checked from file sizes before loading / 1024 (ring buffer, dropped count reported) / 10 s |
 
-The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-Range` and `Origin`. Other request headers, including credentials, are never read or logged. Request-derived fields are clipped to 1024 bytes.
+The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-Range` and `Origin`. Other request headers, including credentials, are never read or logged. Request-derived fields are clipped to 1024 bytes. The `serve-xyz` trace records only method, path, `Origin` and `Accept-Encoding`, clipped the same way.
 
 ## Supported, unsupported and known gaps
 
@@ -258,6 +286,7 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 * **Platforms:** CI runs every gate, including `go test -race`, on Linux (`ubuntu-latest`). It also runs every gate except `-race` on Windows (`windows-latest`, Git Bash, checkout with `core.autocrlf=true`). On macOS (`macos-latest`, Apple silicon) it runs the CLI smoke test only, not the Go test suite. The CGO-free release binaries are smoke-tested natively on linux/amd64, windows/amd64 and darwin/arm64 (darwin/amd64 too if the runner has Rosetta 2); linux/arm64 is built but not launched. The Go floor is 1.24 (CI uses the latest 1.24.x); newer Go releases are not tested in CI.
 * **Reader evidence:** the third-party results are one run each, on Linux, of the versions and entry points named in [docs/results/README.md](docs/results/README.md). They are not claims about other versions or APIs. The current matrices (2026-09-28) cover all 20 scenarios × all 4 valid fixtures for pmtiles npm 4.5.0 (Node and headless Chromium 141, Firefox 142 and WebKit 26), go-pmtiles 1.31.2 and pmtiles-rs 0.24.0, including `ignore-range-no-length` and `exact-8192`; the earlier 15 × 3 matrices are kept as the historical record and were reproduced row for row. No other browser build was run.
 * **Probe:** it is a reference exercise with a strict policy. It fails on an ETag change, warns on a 200 or an expanded 206, and requests the remainder after a short 206. It sends `Accept-Encoding: identity` and fails on any coded 200 or 206 (`content_encoding`) rather than decoding. It is not a production client.
+* **tilecheck:** also strict. It does not retry after a 429 or 503, does not support TileJSON `scheme: tms`, and fails a relative tile URL as `tilejson_invalid`. A 204 or an empty identity 200 reads as an absent tile.
 
 ## Development
 

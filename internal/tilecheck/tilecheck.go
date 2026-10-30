@@ -494,7 +494,8 @@ func (s *xyzSource) fetch(ctx context.Context, z uint8, x, y uint32) (fetched, e
 	}
 	detail := fmt.Sprintf("GET %s -> %d", u, resp.StatusCode)
 	switch resp.StatusCode {
-	case http.StatusNotFound:
+	case http.StatusNotFound, http.StatusNoContent:
+		// A 204 is an empty tile, which has no features: as absent.
 		return fetched{detail: detail}, nil
 	case http.StatusOK:
 	default:
@@ -514,6 +515,11 @@ func (s *xyzSource) fetch(ctx context.Context, z uint8, x, y uint32) (fetched, e
 		enc = "identity"
 	default:
 		return fetched{}, fmt.Errorf("%s: Content-Encoding not requested", detail)
+	}
+	if len(body) == 0 && enc == "identity" {
+		// A 0-byte MVT is a tile with no layers (MVT 2.1 4.1 says a tile
+		// SHOULD have one, not MUST), so no features: as absent.
+		return fetched{detail: detail + " empty"}, nil
 	}
 	return fetched{data: body, encoding: enc, detail: detail}, nil
 }
