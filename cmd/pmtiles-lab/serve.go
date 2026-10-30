@@ -17,6 +17,7 @@ import (
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/rangeserver"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/scenarios"
+	"github.com/lansenou/pmtiles-conformance-lab/internal/xyz"
 )
 
 const maxServedFiles = 256
@@ -161,12 +162,24 @@ func readBounded(p string) ([]byte, error) {
 }
 
 func cmdScenarios(_ context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlags("scenarios", "scenarios [--json]", "  pmtiles-lab scenarios\n  pmtiles-lab scenarios --json\n", stderr)
+	fs := newFlags("scenarios", "scenarios [--xyz] [--json]",
+		"  pmtiles-lab scenarios\n  pmtiles-lab scenarios --json\n  pmtiles-lab scenarios --xyz   # serve-xyz scenarios\n", stderr)
 	asJSON := fs.Bool("json", false, "print JSON")
+	xyzList := fs.Bool("xyz", false, "list the serve-xyz scenarios instead of the serve scenarios")
 	if pos, err := parse(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
 		return usageError{"no positional arguments accepted"}
+	}
+	if *xyzList {
+		list := xyz.Scenarios()
+		if *asJSON {
+			return writeJSON(stdout, list)
+		}
+		for _, s := range list {
+			fmt.Fprintf(stdout, "%-24s %-31s %s\n", s.Name, s.Validity, s.Description)
+		}
+		return nil
 	}
 	all := scenarios.All()
 	if *asJSON {

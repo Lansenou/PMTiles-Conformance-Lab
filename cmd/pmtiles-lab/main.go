@@ -29,8 +29,8 @@ Usage:
   pmtiles-lab inspect ARCHIVE [--tile Z/X/Y]... [--json]
   pmtiles-lab serve (--archive FILE | --dir DIR) [--scenario NAME] [--addr 127.0.0.1:0] [--delay 2s]
   pmtiles-lab probe --url URL --manifest FILE [--archive NAME] [--json] [--timeout 5s]
-  pmtiles-lab scenarios [--json]
-  pmtiles-lab serve-xyz --mbtiles FILE [--addr 127.0.0.1:0] [--public-url URL]
+  pmtiles-lab scenarios [--xyz] [--json]
+  pmtiles-lab serve-xyz --mbtiles FILE [--scenario NAME] [--addr 127.0.0.1:0] [--public-url URL] [--delay 2s]
   pmtiles-lab tilecheck (--pmtiles FILE|URL | --tilejson URL) --manifest FILE [--json]
   pmtiles-lab version
 

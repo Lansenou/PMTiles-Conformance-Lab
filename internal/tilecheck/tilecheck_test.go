@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/mbtiles"
@@ -286,5 +288,122 @@ func TestXYZProtocolChecks(t *testing.T) {
 	rep = XYZ(context.Background(), client, rel.URL, e.corpus)
 	if rep.Result != "fail" || rep.Failures[0].Code != "tilejson_invalid" || len(rep.Tiles) != 0 {
 		t.Errorf("relative tiles URL: %+v", rep)
+	}
+}
+
+// signature summarises a report: result, matched/checked, failed metadata
+// checks, failure codes, and how many tiles had each observation (! marks a
+// mismatch).
+func signature(r *Report) string {
+	var meta, codes []string
+	for _, c := range r.Metadata {
+		if !c.OK {
+			meta = append(meta, c.Name)
+		}
+	}
+	for _, f := range r.Failures {
+		if !slices.Contains(codes, f.Code) {
+			codes = append(codes, f.Code)
+		}
+	}
+	obs := map[string]int{}
+	for _, tr := range r.Tiles {
+		k := tr.Observed
+		if !tr.Match {
+			k += "!"
+		}
+		obs[k]++
+	}
+	var o []string
+	for k, n := range obs {
+		o = append(o, fmt.Sprintf("%s:%d", k, n))
+	}
+	slices.Sort(codes)
+	slices.Sort(o)
+	return fmt.Sprintf("%s %d/%d meta%v codes%v %v", r.Result, r.Summary.TilesMatched, r.Summary.TilesChecked, meta, codes, o)
+}
+
+// TestXYZScenarios runs tilecheck against every serve-xyz scenario and pins
+// the outcome docs/xyz-scenarios.md reports, with one detail text each.
+// tilecheck does not retry, so status-429-once fails like status-503.
+// stall-body stalls 50 ms per tile here.
+func TestXYZScenarios(t *testing.T) {
+	e := setup(t)
+	ts := xyzServer(t, e.mbtiles, func(h http.Handler) http.Handler {
+		h.(*xyz.Handler).Delay = 50 * time.Millisecond
+		return h
+	})
+	want := map[string]string{
+		"normal":                  "pass 10/10 meta[] codes[] [absent:3 present:7]",
+		"truncated-body":          "fail 3/10 meta[] codes[tile_mismatch] [absent:3 error!:7]",
+		"stall-body":              "fail 3/10 meta[] codes[tile_mismatch] [absent:3 error!:7]",
+		"status-429-once":         "fail 0/10 meta[] codes[tile_mismatch] [error!:10]",
+		"status-503":              "fail 0/10 meta[] codes[tile_mismatch] [error!:10]",
+		"absent-204":              "pass 10/10 meta[] codes[] [absent:3 present:7]",
+		"absent-200-empty":        "pass 10/10 meta[] codes[] [absent:3 present:7]",
+		"gzip-unlabelled":         "fail 3/10 meta[] codes[tile_mismatch] [absent:3 present!:7]",
+		"encoding-label-only":     "fail 3/10 meta[] codes[tile_mismatch] [absent:3 present!:7]",
+		"double-gzip":             "fail 3/10 meta[] codes[tile_mismatch] [absent:3 present!:7]",
+		"cors-missing-tiles":      "pass 10/10 meta[] codes[] [absent:3 present:7]",
+		"tilejson-relative-tiles": "fail 0/0 meta[tiles_absolute_template] codes[tilejson_invalid] []",
+		"scheme-tms":              "fail 2/10 meta[scheme] codes[metadata_mismatch tile_mismatch] [absent!:4 absent:1 present!:4 present:1]",
+		"vector-layers-mismatch":  "fail 10/10 meta[vector_layers] codes[metadata_mismatch] [absent:3 present:7]",
+	}
+	// details are the texts docs/xyz-scenarios.md quotes; "" for a pass.
+	details := map[string]string{
+		"truncated-body":          "observed error unexpected EOF",
+		"stall-body":              "observed error unexpected EOF",
+		"status-429-once":         "-> 429: unexpected status",
+		"status-503":              "-> 503: unexpected status",
+		"gzip-unlabelled":         "body is gzip but not labelled Content-Encoding: gzip",
+		"encoding-label-only":     "gunzip: gzip: invalid header",
+		"double-gzip":             "mvt: unsupported wire type 7",
+		"tilejson-relative-tiles": "is not an absolute http(s) URL template",
+		"scheme-tms":              "scheme: expected xyz, observed tms",
+		"vector-layers-mismatch":  "observed points-renamed{name:String,rank:Number}",
+	}
+	if len(want) != len(xyz.Scenarios()) {
+		t.Fatalf("%d pinned, %d scenarios", len(want), len(xyz.Scenarios()))
+	}
+	for _, sc := range xyz.Scenarios() {
+		rep := XYZ(context.Background(), client, ts.URL+"/scenarios/"+sc.Name+xyz.TileJSONPath, e.corpus)
+		if got := signature(rep); got != want[sc.Name] {
+			t.Errorf("%s:\n got %s\nwant %s", sc.Name, got, want[sc.Name])
+		}
+		var text strings.Builder
+		for _, f := range rep.Failures {
+			text.WriteString(f.Message + "\n")
+		}
+		if !strings.Contains(text.String(), details[sc.Name]) {
+			t.Errorf("%s: failures do not mention %q:\n%s", sc.Name, details[sc.Name], text.String())
+		}
+	}
+}
+
+// A 204 or an empty identity 200 reads as absent, so it is a mismatch where
+// the corpus has a tile.
+func TestEmptyResponseForPresentTile(t *testing.T) {
+	e := setup(t)
+	for name, empty := range map[string]func(http.ResponseWriter){
+		"204": func(w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) },
+		"empty 200": func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", xyz.ContentType)
+			w.Header().Set("Content-Length", "0")
+		},
+	} {
+		ts := xyzServer(t, e.mbtiles, func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/0/0/0.pbf" {
+					empty(w)
+					return
+				}
+				h.ServeHTTP(w, r)
+			})
+		})
+		rep := XYZ(context.Background(), client, ts.URL+xyz.TileJSONPath, e.corpus)
+		tr := rep.Tiles[0]
+		if rep.Result != "fail" || tr.Z != 0 || tr.Observed != "absent" || tr.Match || rep.Summary.TilesMatched != 9 {
+			t.Errorf("%s: %s %+v", name, rep.Result, tr)
+		}
 	}
 }

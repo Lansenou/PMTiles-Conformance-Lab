@@ -11,7 +11,7 @@ cmd/pmtiles-lab ──> internal/fixtures  ──> internal/pmtiles
        └──────────> internal/tilecheck ──> internal/pmtiles, internal/mvt, internal/fixtures (manifest types)
 ```
 
-`internal/pmtiles` never imports HTTP code; `internal/rangeserver` never imports PMTiles code (it serves opaque bytes). `internal/xyz` and `internal/mbtiles` import neither PMTiles nor range server code. The generator (`internal/fixtures`) imports no third-party package; only `internal/mbtiles` does.
+`internal/pmtiles` never imports HTTP code; `internal/rangeserver` never imports PMTiles code (it serves opaque bytes). `internal/xyz` and `internal/mbtiles` import neither PMTiles nor range server code; `internal/xyz` keeps its own scenario list, write mechanics and trace for that reason. The generator (`internal/fixtures`) imports no third-party package; only `internal/mbtiles` does.
 
 `verify/` is a separate Go module (own `go.mod`) with tests only. It imports nothing from this module and checks the committed MVT corpus with third-party code: `github.com/paulmach/orb/encoding/mvt` and `modernc.org/sqlite`. Keeping it separate keeps its dependencies out of the binary and out of the main `go.mod`.
 
@@ -24,7 +24,7 @@ cmd/pmtiles-lab ──> internal/fixtures  ──> internal/pmtiles
 | `internal/probe` | URL, manifest entry, `Limits` | `Report` | reference client policy, response framing checks | serving, generation |
 | `internal/mvt` | MVT bytes | decoded features | bounded MVT 2.1 decoding for comparison | encoding, validation of geometry |
 | `internal/mbtiles` | MBTiles path | `Metadata`, tile bytes by XYZ | read-only SQLite access, pbf/`vector_layers` requirement, a queryable `tiles`, one row per coordinate, XYZ -> TMS row | writing, other formats |
-| `internal/xyz` | open `mbtiles.File` | TileJSON, tile responses | routes, content type, gzip negotiation, 404/400 | PMTiles, faults |
+| `internal/xyz` | open `mbtiles.File`, scenario name | TileJSON, tile responses, bounded trace | routes, content type, gzip negotiation, 404/400, the XYZ scenarios (`scenarios.go`), abort/stall mechanics, trace ring | PMTiles, range server scenarios |
 | `internal/tilecheck` | PMTiles `io.ReaderAt` or TileJSON URL, `MVTCorpus` | `Report` (`pmtiles-lab-tilecheck/1`) | fetching the corpus through one path and comparing decoded features (byte equality reported, not required) | serving, generation |
 | `cmd/pmtiles-lab` | argv | stdout/stderr, exit code | flags, human and JSON rendering | logic beyond wiring |
 
