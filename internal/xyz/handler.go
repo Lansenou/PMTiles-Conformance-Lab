@@ -83,7 +83,7 @@ type Exchange struct {
 	X, Y   uint32
 	Stored []byte // tile_data as stored; nil if absent or unreadable
 	Absent bool   // the file has no row for the tile (normal answers 404)
-	N      int    // GETs of this tile path under this scenario since reset, 1-based; 0 if not counted
+	N      int    // for a Counted scenario, GETs of this tile path since reset, 1-based; else 0
 	Resp   *Response
 }
 
@@ -108,12 +108,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	seq, gen := h.trace.seq()
 	name, prefix, p := h.Scenario, "", r.URL.Path
-	if rest, ok := strings.CutPrefix(p, "/scenarios/"); ok {
-		name, p, _ = strings.Cut(rest, "/")
-		prefix, p = "/scenarios/"+name, "/"+p
-	}
 	if name == "" {
 		name = "normal"
+	}
+	if rest, ok := strings.CutPrefix(p, "/scenarios/"); ok {
+		name, p, _ = strings.Cut(rest, "/") // "" is an unknown scenario
+		prefix, p = "/scenarios/"+name, "/"+p
 	}
 	te := TraceEntry{Seq: seq, Scenario: clip(name), Method: clip(r.Method), Path: clip(r.URL.Path),
 		Origin: clip(r.Header.Get("Origin")), AcceptEncoding: clip(strings.Join(r.Header.Values("Accept-Encoding"), ", "))}
@@ -142,7 +142,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	te.Status = resp.Status
 	te.ContentType = resp.Header.Get("Content-Type")
 	te.ContentEncoding = resp.Header.Get("Content-Encoding")
-	te.ContentLength = resp.Header.Get("Content-Length")
+	if bodyAllowed(resp.Status) { // net/http drops Content-Length otherwise
+		te.ContentLength = resp.Header.Get("Content-Length")
+	}
 	te.RetryAfter = resp.Header.Get("Retry-After")
 	h.write(w, r, resp, &te, commit)
 }
@@ -213,7 +215,7 @@ func (h *Handler) tile(r *http.Request, sc Scenario, p string) *Response {
 		return errorResponse(http.StatusBadRequest, "tile coordinates out of range")
 	}
 	ex := &Exchange{Req: r, Z: uint8(z), X: uint32(x), Y: uint32(y)}
-	if r.Method == http.MethodGet {
+	if sc.Counted && r.Method == http.MethodGet {
 		ex.N = h.count(sc.Name + " " + p)
 	}
 	row := ex.Y
@@ -337,6 +339,12 @@ func (h *Handler) serveLab(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// bodyAllowed mirrors net/http: 1xx, 204 and 304 responses carry no body
+// and no Content-Length on the wire.
+func bodyAllowed(status int) bool {
+	return (status < 100 || status > 199) && status != http.StatusNoContent && status != http.StatusNotModified
+}
+
 // write sends resp, applying cut and stall, and records what was sent in te.
 // As in the range server, commit is called with te describing the complete
 // response before its last byte is flushed, so a client that has seen the
@@ -348,7 +356,7 @@ func (h *Handler) write(w http.ResponseWriter, r *http.Request, resp *Response, 
 	}
 	w.WriteHeader(resp.Status)
 	body := resp.Body
-	if r.Method == http.MethodHead || resp.Status == http.StatusNoContent {
+	if r.Method == http.MethodHead || !bodyAllowed(resp.Status) {
 		body = nil
 	}
 	rc := http.NewResponseController(w)

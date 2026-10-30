@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/mbtiles"
@@ -323,11 +324,15 @@ func signature(r *Report) string {
 }
 
 // TestXYZScenarios runs tilecheck against every serve-xyz scenario and pins
-// the outcome docs/xyz-scenarios.md reports. tilecheck does not retry, so
-// status-429-once fails like status-503.
+// the outcome docs/xyz-scenarios.md reports, with one detail text each.
+// tilecheck does not retry, so status-429-once fails like status-503.
+// stall-body stalls 50 ms per tile here.
 func TestXYZScenarios(t *testing.T) {
 	e := setup(t)
-	ts := xyzServer(t, e.mbtiles, nil)
+	ts := xyzServer(t, e.mbtiles, func(h http.Handler) http.Handler {
+		h.(*xyz.Handler).Delay = 50 * time.Millisecond
+		return h
+	})
 	want := map[string]string{
 		"normal":                  "pass 10/10 meta[] codes[] [absent:3 present:7]",
 		"truncated-body":          "fail 3/10 meta[] codes[tile_mismatch] [absent:3 error!:7]",
@@ -344,6 +349,19 @@ func TestXYZScenarios(t *testing.T) {
 		"scheme-tms":              "fail 2/10 meta[scheme] codes[metadata_mismatch tile_mismatch] [absent!:4 absent:1 present!:4 present:1]",
 		"vector-layers-mismatch":  "fail 10/10 meta[vector_layers] codes[metadata_mismatch] [absent:3 present:7]",
 	}
+	// details are the texts docs/xyz-scenarios.md quotes; "" for a pass.
+	details := map[string]string{
+		"truncated-body":          "observed error unexpected EOF",
+		"stall-body":              "observed error unexpected EOF",
+		"status-429-once":         "-> 429: unexpected status",
+		"status-503":              "-> 503: unexpected status",
+		"gzip-unlabelled":         "body is gzip but not labelled Content-Encoding: gzip",
+		"encoding-label-only":     "gunzip: gzip: invalid header",
+		"double-gzip":             "mvt: unsupported wire type 7",
+		"tilejson-relative-tiles": "is not an absolute http(s) URL template",
+		"scheme-tms":              "scheme: expected xyz, observed tms",
+		"vector-layers-mismatch":  "observed points-renamed{name:String,rank:Number}",
+	}
 	if len(want) != len(xyz.Scenarios()) {
 		t.Fatalf("%d pinned, %d scenarios", len(want), len(xyz.Scenarios()))
 	}
@@ -351,6 +369,13 @@ func TestXYZScenarios(t *testing.T) {
 		rep := XYZ(context.Background(), client, ts.URL+"/scenarios/"+sc.Name+xyz.TileJSONPath, e.corpus)
 		if got := signature(rep); got != want[sc.Name] {
 			t.Errorf("%s:\n got %s\nwant %s", sc.Name, got, want[sc.Name])
+		}
+		var text strings.Builder
+		for _, f := range rep.Failures {
+			text.WriteString(f.Message + "\n")
+		}
+		if !strings.Contains(text.String(), details[sc.Name]) {
+			t.Errorf("%s: failures do not mention %q:\n%s", sc.Name, details[sc.Name], text.String())
 		}
 	}
 }

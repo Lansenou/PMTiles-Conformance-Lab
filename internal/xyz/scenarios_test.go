@@ -154,6 +154,9 @@ func TestScenarioList(t *testing.T) {
 			t.Errorf("%+v", s)
 		}
 		names[s.Name] = true
+		if s.Counted != (s.Name == "status-429-once") {
+			t.Errorf("%s: Counted %v", s.Name, s.Counted)
+		}
 		if got, ok := LookupScenario(s.Name); !ok || got.Name != s.Name {
 			t.Errorf("lookup %s", s.Name)
 		}
@@ -221,7 +224,8 @@ func TestStallBodyClientDeadline(t *testing.T) {
 }
 
 // A TileJSON under a scenario prefix keeps the prefix in its tile URLs;
-// Handler.Scenario applies to paths without a prefix; an unknown name is 404.
+// Handler.Scenario applies to paths without a prefix; an unknown or empty
+// name is 404.
 func TestScenarioPrefix(t *testing.T) {
 	ts := scenarioServer(t, &Handler{Scenario: "absent-204"})
 	var tj TileJSON
@@ -234,7 +238,7 @@ func TestScenarioPrefix(t *testing.T) {
 		t.Errorf("default tilejson: %v %q", err, tj.Tiles)
 	}
 	for path, want := range map[string]int{"/1/0/1.pbf": 204, "/scenarios/normal/1/0/1.pbf": 404, "/scenarios/nope/0/0/0.pbf": 404,
-		"/scenarios/normal/0/0/0.pbf": 200, "/scenarios/normal": 404} {
+		"/scenarios/normal/0/0/0.pbf": 200, "/scenarios/normal": 404, "/scenarios//0/0/0.pbf": 404} {
 		if s := fetch(t, context.Background(), ts.URL+path); s.status != want {
 			t.Errorf("%s: %d, want %d", path, s.status, want)
 		}

@@ -30,6 +30,9 @@ type Scenario struct {
 	// TMS announces scheme "tms" in TileJSON and reads the request y as the
 	// MBTiles tile_row.
 	TMS bool `json:"-"`
+	// Counted numbers the GETs of each tile path since reset in
+	// Exchange.N, for up to 65536 paths; later paths get N 0.
+	Counted bool `json:"-"`
 	// TileJSON, if set, changes the document before it is encoded.
 	TileJSON func(*TileJSON) `json:"-"`
 	// Tile, if set, changes the planned response of a tile request with
@@ -58,6 +61,7 @@ func Scenarios() []Scenario {
 		{
 			Name: "status-429-once", Validity: Valid,
 			Description: "The first GET of each tile path since reset gets 429 with Retry-After: 1; later requests are normal.",
+			Counted:     true,
 			Tile:        status429Once,
 		},
 		{
@@ -207,8 +211,8 @@ func doubleGzip(x *Exchange) {
 	}
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
-	zw.Write(x.Stored)
-	zw.Close()
+	_, _ = zw.Write(x.Stored) // writes to a bytes.Buffer do not fail
+	_ = zw.Close()
 	x.Resp.Header.Set("Content-Encoding", "gzip")
 	setBody(x, buf.Bytes())
 }

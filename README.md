@@ -273,7 +273,7 @@ Independent readers verify the valid archives: go-pmtiles v1.31.2 (all 60 manife
 | `serve-xyz` trace entries / delay | 1024 (ring buffer, dropped count reported) / 10 s |
 | `serve` archive bytes / trace entries / delay | 64 MiB in total, checked from file sizes before loading / 1024 (ring buffer, dropped count reported) / 10 s |
 
-The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-Range` and `Origin`. Other request headers, including credentials, are never read or logged. Request-derived fields are clipped to 1024 bytes. The `serve-xyz` trace records only method, path, `Origin` and `Accept-Encoding`, clipped the same way.
+The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-Range` and `Origin`. Other request headers, including credentials, are never read or logged. Request-derived fields are clipped to 1024 bytes. The `serve-xyz` trace records only the scenario, method, path, `Origin` and `Accept-Encoding`, clipped the same way.
 
 ## Supported, unsupported and known gaps
 
