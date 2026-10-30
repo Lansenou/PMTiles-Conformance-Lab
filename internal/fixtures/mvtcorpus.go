@@ -126,9 +126,15 @@ func mvtSpec() spec {
 // mbtilesTMSRow converts an XYZ row to the MBTiles (TMS) tile_row.
 func mbtilesTMSRow(z uint8, y uint32) uint32 { return 1<<z - 1 - y }
 
-// buildMBTiles writes the MBTiles 1.3 file: metadata and tiles tables and
-// the optional unique tile_index, with application_id "MPBX".
+// buildMBTiles writes the MBTiles 1.3 file with application_id "MPBX".
 func buildMBTiles(blobs map[string][]byte) []byte {
+	return sqliteDB(mbtilesSchema(blobs), mbtilesAppID)
+}
+
+// mbtilesSchema is the corpus MBTiles layout: metadata and tiles tables and
+// the optional unique tile_index. Each MBTiles case (mbtilescases.go) changes
+// one part of a fresh copy.
+func mbtilesSchema(blobs map[string][]byte) sqlSchema {
 	minZ, maxZ := uint8(255), uint8(0)
 	for _, t := range mvtTiles {
 		minZ, maxZ = min(minZ, t.z), max(maxZ, t.z)
@@ -152,9 +158,9 @@ func buildMBTiles(blobs map[string][]byte) []byte {
 	for _, t := range mvtTiles {
 		tiles.rows = append(tiles.rows, []any{int64(t.z), int64(t.x), int64(mbtilesTMSRow(t.z, t.y)), blobs[mvtKey(t.z, t.x, t.y)]})
 	}
-	idx := sqlIndex{name: "tile_index", table: 1, cols: []int{0, 1, 2},
+	idx := sqlIndex{name: "tile_index", table: "tiles", cols: []int{0, 1, 2}, unique: true,
 		sql: "CREATE UNIQUE INDEX tile_index on tiles (zoom_level, tile_column, tile_row)"}
-	return sqliteDB([]sqlTable{meta, tiles}, []sqlIndex{idx}, mbtilesAppID)
+	return sqlSchema{tables: []sqlTable{meta, tiles}, indexes: []sqlIndex{idx}}
 }
 
 // buildMVTCorpus returns both files and the manifest section.

@@ -148,10 +148,63 @@ func deflateZeroRun(matches int) (stream []byte, inflated uint64) {
 	return w.flush(), 1 + 258*uint64(matches)
 }
 
+// deflateZeroRunDynamic returns one final dynamic-Huffman deflate block
+// (RFC 1951 §3.2.7) that inflates to 1+258*matches zero bytes, like
+// deflateZeroRun, but each match costs 2 bits: symbol 285 (length 258) has a
+// 1-bit code and the only distance code, distance 1, has 1 bit. The ratio is
+// about 1032:1.
+func deflateZeroRunDynamic(matches int) (stream []byte, inflated uint64) {
+	var w bitWriter
+	w.bits(1, 1)       // BFINAL
+	w.bits(2, 2)       // BTYPE 10: dynamic Huffman codes
+	w.bits(286-257, 5) // HLIT: 286 literal/length code lengths
+	w.bits(1-1, 5)     // HDIST: 1 distance code length
+	w.bits(18-4, 4)    // HCLEN: 18 code length code lengths
+	// Code length code lengths in the order 16, 17, 18, 0, 8, 7, 9, 6, 10,
+	// 5, 11, 4, 12, 3, 13, 2, 14, 1: 18 (a run of zeros) gets 1 bit, 1 and 2
+	// get 2 bits. Canonical codes: 18 = 0, 1 = 10, 2 = 11.
+	for _, n := range []uint64{0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2} {
+		w.bits(n, 3)
+	}
+	zeroRun := func(n uint64) { // 11-138 zero lengths: code 18 and 7 extra bits
+		w.code(0, 1)
+		w.bits(n-11, 7)
+	}
+	// Literal/length code lengths: 0 -> 2, 1-255 -> 0, 256 -> 2,
+	// 257-284 -> 0, 285 -> 1; then distance code length 0 -> 1. Canonical
+	// codes: 285 = 0, literal 0 = 10, end of block 256 = 11; distance 0 = 0.
+	w.code(3, 2) // length 2
+	zeroRun(138)
+	zeroRun(117)
+	w.code(3, 2) // length 2
+	zeroRun(28)
+	w.code(2, 2) // length 1
+	w.code(2, 2) // length 1
+	w.code(2, 2) // literal 0
+	for i := 0; i < matches; i++ {
+		w.code(0, 1) // symbol 285 = length 258, no extra bits
+		w.code(0, 1) // distance code 0 = distance 1, no extra bits
+	}
+	w.code(3, 2) // symbol 256, end of block
+	return w.flush(), 1 + 258*uint64(matches)
+}
+
 // gzipZeroBomb wraps deflateZeroRun in a gzip member with the correct CRC-32
 // and ISIZE of the inflated zeros.
 func gzipZeroBomb(matches int) (member []byte, inflated uint64) {
 	stream, n := deflateZeroRun(matches)
+	return gzipZeros(stream, n), n
+}
+
+// gzipZeroBombDynamic is gzipZeroBomb with deflateZeroRunDynamic.
+func gzipZeroBombDynamic(matches int) (member []byte, inflated uint64) {
+	stream, n := deflateZeroRunDynamic(matches)
+	return gzipZeros(stream, n), n
+}
+
+// gzipZeros wraps a deflate stream that inflates to n zero bytes in a gzip
+// member with their CRC-32 and ISIZE.
+func gzipZeros(stream []byte, n uint64) []byte {
 	zeros := make([]byte, 4096)
 	crc := uint32(0)
 	for left := n; left > 0; {
@@ -162,7 +215,7 @@ func gzipZeroBomb(matches int) (member []byte, inflated uint64) {
 	out := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff}
 	out = append(out, stream...)
 	out = binary.LittleEndian.AppendUint32(out, crc)
-	return binary.LittleEndian.AppendUint32(out, uint32(n)), n
+	return binary.LittleEndian.AppendUint32(out, uint32(n))
 }
 
 // uvarint returns the protobuf-style varint encoding of v.

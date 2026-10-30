@@ -38,11 +38,15 @@ func cmdGenerate(_ context.Context, args []string, stdout, stderr io.Writer) err
 		return err
 	}
 	for _, a := range m.Archives {
-		fmt.Fprintf(stdout, "%-11s %-40s %s\n", a.Kind, a.File, a.SHA256)
+		fmt.Fprintf(stdout, "%-11s %-46s %s\n", a.Kind, a.File, a.SHA256)
 	}
 	for _, f := range m.MVTCorpus.Files {
-		fmt.Fprintf(stdout, "%-11s %-40s %s\n", "mvt-corpus", f.File, f.SHA256)
+		fmt.Fprintf(stdout, "%-11s %-46s %s\n", "mvt-corpus", f.File, f.SHA256)
 	}
-	fmt.Fprintf(stdout, "wrote %d archives, %d mvt corpus files and manifest.json to %s\n", len(m.Archives), len(m.MVTCorpus.Files), *out)
+	for _, a := range m.MBTilesArchives {
+		fmt.Fprintf(stdout, "%-11s %-46s %s\n", "mbtiles", a.File, a.SHA256)
+	}
+	fmt.Fprintf(stdout, "wrote %d archives, %d mvt corpus files, %d MBTiles cases and manifest.json to %s\n",
+		len(m.Archives), len(m.MVTCorpus.Files), len(m.MBTilesArchives), *out)
 	return nil
 }

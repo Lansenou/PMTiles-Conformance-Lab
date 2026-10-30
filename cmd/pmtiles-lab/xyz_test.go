@@ -106,7 +106,7 @@ func TestXYZUsage(t *testing.T) {
 	if code, _, _ := runCLI("serve-xyz", "--mbtiles", filepath.Join(dir, "missing.mbtiles")); code != exitRuntime {
 		t.Errorf("missing file: exit %d", code)
 	}
-	if code, out, _ := runCLI("version"); code != exitOK || !strings.HasPrefix(out, "pmtiles-lab dev (fixtures generator 0.4.0") {
+	if code, out, _ := runCLI("version"); code != exitOK || !strings.HasPrefix(out, "pmtiles-lab dev (fixtures generator 0.5.0") {
 		t.Errorf("version: %q", out)
 	}
 }

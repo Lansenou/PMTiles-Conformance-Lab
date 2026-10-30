@@ -49,7 +49,7 @@ type File struct {
 }
 
 // Open opens path read-only and checks that it is a pbf tileset with
-// vector_layers.
+// vector_layers and a tiles table or view.
 func Open(path string) (*File, error) {
 	if err := checkSQLiteMagic(path); err != nil {
 		return nil, err
@@ -72,6 +72,10 @@ func Open(path string) (*File, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := f.checkTiles(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return f, nil
 }
 
@@ -82,7 +86,12 @@ func checkSQLiteMagic(path string) error {
 	}
 	defer fh.Close()
 	var magic [16]byte
-	if _, err := io.ReadFull(fh, magic[:]); err != nil || string(magic[:]) != "SQLite format 3\x00" {
+	n, err := io.ReadFull(fh, magic[:])
+	if n == 0 {
+		// SQLite would open it as an empty database with no tables.
+		return fmt.Errorf("%w: %s is empty (0 bytes), not an SQLite 3 database", ErrUnsupported, path)
+	}
+	if err != nil || string(magic[:]) != "SQLite format 3\x00" {
 		return fmt.Errorf("%w: %s is not an SQLite 3 database", ErrUnsupported, path)
 	}
 	return nil
@@ -145,6 +154,16 @@ func (f *File) readMetadata() error {
 	return nil
 }
 
+// checkTiles refuses a file without a tiles table or view with the MBTiles
+// columns at open, so it does not fail tile by tile later.
+func (f *File) checkTiles() error {
+	rows, err := f.db.Query("SELECT zoom_level, tile_column, tile_row, tile_data FROM tiles LIMIT 0")
+	if err != nil {
+		return fmt.Errorf("%w: reading tiles table: %v", ErrUnsupported, err)
+	}
+	return rows.Close()
+}
+
 func zoom(s string) (int, error) {
 	z, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || z < 0 || z > 30 {
@@ -174,29 +193,43 @@ func numbers(s string, n int) []float64 {
 func TMSRow(z uint8, y uint32) uint32 { return uint32(1)<<z - 1 - y }
 
 // Tile returns the stored tile_data for XYZ z/x/y, or nil with a nil error
-// if there is no such row. x and y must be below 2^z.
+// if there is no such row. Two rows at one coordinate are an error, not a
+// choice. x and y must be below 2^z.
 func (f *File) Tile(ctx context.Context, z uint8, x, y uint32) ([]byte, error) {
 	if z > 30 || uint64(x) >= 1<<z || uint64(y) >= 1<<z {
 		return nil, fmt.Errorf("tile %d/%d/%d out of range", z, x, y)
 	}
-	var b []byte
-	err := f.db.QueryRowContext(ctx,
-		"SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ? AND length(tile_data) <= ?",
-		z, x, TMSRow(z, y), MaxTileBytes).Scan(&b)
-	if errors.Is(err, sql.ErrNoRows) {
-		// Distinguish an oversized blob from a missing row.
-		var n int64
-		if f.db.QueryRowContext(ctx, "SELECT length(tile_data) FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
-			z, x, TMSRow(z, y)).Scan(&n) == nil {
-			return nil, fmt.Errorf("tile %d/%d/%d is %d bytes, limit %d", z, x, y, n, MaxTileBytes)
-		}
-		return nil, nil
-	}
+	// Up to 2 rows; the CASE reads no blob over the limit, and length()
+	// still reports its size.
+	rows, err := f.db.QueryContext(ctx,
+		"SELECT length(tile_data), CASE WHEN length(tile_data) <= ? THEN tile_data END FROM tiles "+
+			"WHERE zoom_level = ? AND tile_column = ? AND tile_row = ? LIMIT 2",
+		MaxTileBytes, z, x, TMSRow(z, y))
 	if err != nil {
 		return nil, err
 	}
-	if b == nil {
-		b = []byte{} // a present row with empty or NULL data
+	defer rows.Close()
+	var n sql.NullInt64
+	var b []byte
+	found := 0
+	for rows.Next() {
+		if found++; found > 1 {
+			return nil, fmt.Errorf("tile %d/%d/%d has more than one row", z, x, y)
+		}
+		if err := rows.Scan(&n, &b); err != nil {
+			return nil, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	switch {
+	case found == 0:
+		return nil, nil
+	case n.Int64 > MaxTileBytes:
+		return nil, fmt.Errorf("tile %d/%d/%d is %d bytes, limit %d", z, x, y, n.Int64, MaxTileBytes)
+	case b == nil:
+		return []byte{}, nil // a present row with empty or NULL data
 	}
 	return b, nil
 }

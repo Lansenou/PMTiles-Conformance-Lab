@@ -23,7 +23,7 @@ cmd/pmtiles-lab ──> internal/fixtures  ──> internal/pmtiles
 | `internal/scenarios` | the normal planned `Response` | a mutated `Response` | every fault, one behaviour each, stable names | normal semantics |
 | `internal/probe` | URL, manifest entry, `Limits` | `Report` | reference client policy, response framing checks | serving, generation |
 | `internal/mvt` | MVT bytes | decoded features | bounded MVT 2.1 decoding for comparison | encoding, validation of geometry |
-| `internal/mbtiles` | MBTiles path | `Metadata`, tile bytes by XYZ | read-only SQLite access, pbf/`vector_layers` requirement, XYZ -> TMS row | writing, other formats |
+| `internal/mbtiles` | MBTiles path | `Metadata`, tile bytes by XYZ | read-only SQLite access, pbf/`vector_layers` requirement, a queryable `tiles`, one row per coordinate, XYZ -> TMS row | writing, other formats |
 | `internal/xyz` | open `mbtiles.File` | TileJSON, tile responses | routes, content type, gzip negotiation, 404/400 | PMTiles, faults |
 | `internal/tilecheck` | PMTiles `io.ReaderAt` or TileJSON URL, `MVTCorpus` | `Report` (`pmtiles-lab-tilecheck/1`) | fetching the corpus through one path and comparing decoded features (byte equality reported, not required) | serving, generation |
 | `cmd/pmtiles-lab` | argv | stdout/stderr, exit code | flags, human and JSON rendering | logic beyond wiring |
@@ -38,6 +38,6 @@ cmd/pmtiles-lab ──> internal/fixtures  ──> internal/pmtiles
 
 ## Why the generator has its own compressors
 
-`compress/flate` and `image/png` output is not guaranteed stable across Go releases, and fixture hashes are a published contract. The generator therefore writes stored-block deflate (inside gzip, zlib and PNG) and one fixed-Huffman stream for the decompression-bomb case. Readers use the standard library decoders.
+`compress/flate` and `image/png` output is not guaranteed stable across Go releases, and fixture hashes are a published contract. The generator therefore writes stored-block deflate (inside gzip, zlib and PNG) and one fixed-Huffman stream for the PMTiles decompression-bomb case, and one dynamic-Huffman stream for the MBTiles one. Readers use the standard library decoders.
 
-For the same reason the MVT tiles are encoded by a small hand-written protobuf writer (`mvt.go`) and the MBTiles file by a minimal SQLite 3 file writer (`sqlite.go`: one leaf page per table or index), not by an SQLite library whose output could change between versions. Real SQLite engines read it back in tests (`PRAGMA integrity_check`).
+For the same reason the MVT tiles are encoded by a small hand-written protobuf writer (`mvt.go`) and the MBTiles file by a minimal SQLite 3 file writer (`sqlite.go`: one leaf page per table or index, views, and overflow pages for rows larger than a page), not by an SQLite library whose output could change between versions. Real SQLite engines read it back in tests (`PRAGMA integrity_check`).

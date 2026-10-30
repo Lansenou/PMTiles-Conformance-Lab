@@ -9,6 +9,9 @@ type Manifest struct {
 	Archives  []Archive `json:"archives"`
 	// MVTCorpus is optional; absent in manifests before generator 0.4.0.
 	MVTCorpus *MVTCorpus `json:"mvt_corpus,omitempty"`
+	// MBTilesArchives is optional; absent in manifests before generator
+	// 0.5.0.
+	MBTilesArchives []MBTilesArchive `json:"mbtiles_archives,omitempty"`
 }
 
 // Generator identifies the program that wrote the corpus.
@@ -135,4 +138,49 @@ type ExpectedFeature struct {
 	Type        string         `json:"type"`
 	Coordinates []int64        `json:"coordinates"`
 	Properties  map[string]any `json:"properties"`
+}
+
+// MBTilesArchive is one MBTiles fixture (manifest field "mbtiles_archives",
+// added in generator 0.5.0; documented in docs/fixtures.md): the corpus
+// MBTiles file Base with one change. It is separate from Archives, so tools
+// that iterate Archives see the same entries as before.
+type MBTilesArchive struct {
+	Name        string          `json:"name"`
+	File        string          `json:"file"`
+	Kind        string          `json:"kind"` // valid or malformed
+	SHA256      string          `json:"sha256"`
+	Size        int             `json:"size"`
+	Base        string          `json:"base"`
+	Change      string          `json:"change"`
+	Description string          `json:"description"`
+	Validity    MBTilesValidity `json:"validity"`
+	// ExpectedOpen lists the acceptable results of opening the file, the
+	// lab's recommendation first: "ok" or "refuse".
+	ExpectedOpen []string `json:"expected_open"`
+	// Tiles lists only coordinates whose expected outcome differs from
+	// mvt_corpus.tiles. When the file opens, every other corpus coordinate
+	// reads as in mvt_corpus.
+	Tiles []MBTilesTile `json:"tiles,omitempty"`
+}
+
+// MBTilesValidity classifies a file as an SQLite database (valid or invalid)
+// and as an MBTiles 1.3 tileset (valid, invalid or not-addressed), with the
+// rule that decides it.
+type MBTilesValidity struct {
+	SQLite  string `json:"sqlite"`
+	MBTiles string `json:"mbtiles"`
+	Source  string `json:"source"`
+}
+
+// MBTilesTile lists the acceptable outcomes at one XYZ coordinate, the lab's
+// recommendation first: "refuse" (an error for the tile, never data, empty
+// or absent), "absent", or "features:Z/X/Y" (the mvt_corpus features of that
+// coordinate).
+type MBTilesTile struct {
+	Z        uint8    `json:"z"`
+	X        uint32   `json:"x"`
+	Y        uint32   `json:"y"`
+	TMSRow   uint32   `json:"tms_row"`
+	Outcomes []string `json:"outcomes"`
+	Purpose  string   `json:"purpose"`
 }
