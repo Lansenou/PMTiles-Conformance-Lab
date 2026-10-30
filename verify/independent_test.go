@@ -46,6 +46,11 @@ type manifest struct {
 			}
 		}
 	} `json:"mvt_corpus"`
+	MBTilesArchives []struct {
+		Name, File, SHA256 string
+		Validity           struct{ SQLite string }
+		Tiles              []struct{ Z, X, Y uint32 }
+	} `json:"mbtiles_archives"`
 }
 
 func fixturesDir() string {

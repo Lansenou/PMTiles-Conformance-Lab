@@ -7,12 +7,12 @@ import (
 	"sort"
 )
 
-// Minimal SQLite 3 database writer for the MBTiles fixture
+// Minimal SQLite 3 database writer for the MBTiles fixtures
 // (https://www.sqlite.org/fileformat2.html). Every table and index is a
-// single leaf page, so there are no interior pages, overflow pages or
-// freelist. Output depends only on this source, not on an SQLite library;
-// tests open the result with a real SQLite engine and run
-// PRAGMA integrity_check.
+// single leaf page, so there are no interior pages or freelist; a table row
+// too large for its leaf continues on overflow pages. Output depends only on
+// this source, not on an SQLite library; tests open the result with a real
+// SQLite engine and run PRAGMA integrity_check.
 
 const sqlitePageSize = 4096
 
@@ -22,11 +22,22 @@ type sqlTable struct {
 	rows      [][]any // int64, string or []byte
 }
 
-// sqlIndex indexes columns cols of table (by position in tables).
+// sqlIndex indexes columns cols of the named table. Building a unique index
+// over duplicate keys panics.
 type sqlIndex struct {
-	name, sql string
-	table     int
-	cols      []int
+	name, sql, table string
+	cols             []int
+	unique           bool
+}
+
+// sqlView is a view: a schema row with root page 0 and no b-tree.
+type sqlView struct{ name, sql string }
+
+// sqlSchema is the content of one database file.
+type sqlSchema struct {
+	tables  []sqlTable
+	indexes []sqlIndex
+	views   []sqlView
 }
 
 // sqliteVarint is SQLite's big-endian varint (fileformat2 §1.6), for values
@@ -118,23 +129,49 @@ func sqliteLeaf(kind byte, hdrOff int, cells [][]byte) []byte {
 }
 
 // Largest payload stored without overflow for a 4096-byte page
-// (fileformat2 §1.6: U-35 for table leaves, ((U-12)*64/255)-23 for indexes).
+// (fileformat2 §1.6: X = U-35 for table leaves, ((U-12)*64/255)-23 for
+// indexes), and M = ((U-12)*32/255)-23, the smallest local part of a table
+// row that overflows.
 const (
 	sqliteMaxTableLocal = sqlitePageSize - 35
+	sqliteMinTableLocal = (sqlitePageSize-12)*32/255 - 23
 	sqliteMaxIndexLocal = (sqlitePageSize-12)*64/255 - 23
 )
 
-func tableLeaf(hdrOff int, rows [][]any) []byte {
+// tableLeaf returns the leaf page of rows and the overflow pages its large
+// rows need, numbered from firstOverflow on. A payload of P > X bytes keeps
+// K = M+((P-M)%(U-4)) bytes on the leaf if K <= X, else M, followed by the
+// first overflow page number. Each overflow page holds the next page number
+// (0 on the last) and U-4 payload bytes (fileformat2 §1.6).
+func tableLeaf(hdrOff int, rows [][]any, firstOverflow uint32) (leaf []byte, overflow [][]byte) {
 	var cells [][]byte
 	for i, r := range rows {
 		rec := sqliteRecord(r)
-		if len(rec) > sqliteMaxTableLocal {
-			panic("sqlite: row needs an overflow page")
+		local := len(rec)
+		if local > sqliteMaxTableLocal {
+			local = sqliteMinTableLocal + (len(rec)-sqliteMinTableLocal)%(sqlitePageSize-4)
+			if local > sqliteMaxTableLocal {
+				local = sqliteMinTableLocal
+			}
 		}
 		c := append(sqliteVarint(uint64(len(rec))), sqliteVarint(uint64(i+1))...)
-		cells = append(cells, append(c, rec...))
+		c = append(c, rec[:local]...)
+		if rest := rec[local:]; len(rest) > 0 {
+			next := firstOverflow + uint32(len(overflow))
+			c = binary.BigEndian.AppendUint32(c, next)
+			for len(rest) > 0 {
+				p := make([]byte, sqlitePageSize)
+				rest = rest[copy(p[4:], rest):]
+				next++
+				if len(rest) > 0 {
+					binary.BigEndian.PutUint32(p, next)
+				}
+				overflow = append(overflow, p)
+			}
+		}
+		cells = append(cells, c)
 	}
-	return sqliteLeaf(13, hdrOff, cells)
+	return sqliteLeaf(13, hdrOff, cells), overflow
 }
 
 // compareKey orders index keys of int64 values.
@@ -151,7 +188,7 @@ func compareKey(a, b []any) int {
 	return 0
 }
 
-func indexLeaf(t sqlTable, cols []int) []byte {
+func indexLeaf(t sqlTable, cols []int, unique bool) []byte {
 	var keys [][]any
 	for i, r := range t.rows {
 		var k []any
@@ -163,7 +200,7 @@ func indexLeaf(t sqlTable, cols []int) []byte {
 	sort.Slice(keys, func(i, j int) bool { return compareKey(keys[i], keys[j]) < 0 })
 	var cells [][]byte
 	for i, k := range keys {
-		if i > 0 && compareKey(keys[i-1][:len(cols)], k[:len(cols)]) == 0 {
+		if unique && i > 0 && compareKey(keys[i-1][:len(cols)], k[:len(cols)]) == 0 {
 			panic("sqlite: duplicate key in unique index")
 		}
 		rec := sqliteRecord(k)
@@ -175,24 +212,42 @@ func indexLeaf(t sqlTable, cols []int) []byte {
 	return sqliteLeaf(10, 0, cells)
 }
 
-// sqliteDB returns a database file with the tables on pages 2.. and the
-// indexes after them, and appID in the header.
-func sqliteDB(tables []sqlTable, indexes []sqlIndex, appID uint32) []byte {
+// sqliteDB returns a database file with the schema on page 1, one leaf page
+// per table and then per index in order, then the tables' overflow pages,
+// and appID in the header. Views are schema rows only.
+func sqliteDB(s sqlSchema, appID uint32) []byte {
+	byName := map[string]sqlTable{}
+	for _, t := range s.tables {
+		byName[t.name] = t
+	}
 	var schema [][]any
-	var pages [][]byte
+	var pages, overflow [][]byte
 	next := int64(2)
-	for _, t := range tables {
+	firstOverflow := uint32(2 + len(s.tables) + len(s.indexes))
+	for _, t := range s.tables {
 		schema = append(schema, []any{"table", t.name, t.name, next, t.sql})
-		pages = append(pages, tableLeaf(0, t.rows))
+		leaf, ov := tableLeaf(0, t.rows, firstOverflow+uint32(len(overflow)))
+		pages = append(pages, leaf)
+		overflow = append(overflow, ov...)
 		next++
 	}
-	for _, ix := range indexes {
-		t := tables[ix.table]
+	for _, ix := range s.indexes {
+		t, ok := byName[ix.table]
+		if !ok {
+			panic("sqlite: index " + ix.name + " on unknown table " + ix.table)
+		}
 		schema = append(schema, []any{"index", ix.name, t.name, next, ix.sql})
-		pages = append(pages, indexLeaf(t, ix.cols))
+		pages = append(pages, indexLeaf(t, ix.cols, ix.unique))
 		next++
 	}
-	page1 := tableLeaf(100, schema)
+	for _, v := range s.views {
+		schema = append(schema, []any{"view", v.name, v.name, int64(0), v.sql})
+	}
+	pages = append(pages, overflow...)
+	page1, ov := tableLeaf(100, schema, 0)
+	if len(ov) > 0 {
+		panic("sqlite: schema row needs an overflow page")
+	}
 	h := page1[:100]
 	copy(h, "SQLite format 3\x00")
 	binary.BigEndian.PutUint16(h[16:], sqlitePageSize)

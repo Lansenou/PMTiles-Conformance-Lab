@@ -27,7 +27,7 @@ The lab makes each of these server behaviours reproducible on `127.0.0.1`. You c
 
 It is a development and CI tool. It is not a production tile server, map renderer, tile downloader, MBTiles validator or general PMTiles SDK.
 
-Status: fixture generator 0.4.0. Every push to `main` that passes CI publishes a `v0.4.N` release with binaries for five platforms ([docs/release-proposal.md](docs/release-proposal.md)). See [Limits and known gaps](#supported-unsupported-and-known-gaps).
+Status: fixture generator 0.5.0. Every push to `main` that passes CI publishes a `v0.4.N` release with binaries for five platforms ([docs/release-proposal.md](docs/release-proposal.md)). See [Limits and known gaps](#supported-unsupported-and-known-gaps).
 
 ## What it found in three readers
 
@@ -143,8 +143,8 @@ With `--json`, both print a `pmtiles-lab-tilecheck/1` report whose `tiles[]` ent
 `serve-xyz` works with any MBTiles 1.3 file whose `format` is `pbf` and whose `json` metadata row has `vector_layers`, including files where `tiles` is a view. It opens the file read-only. It answers:
 
 * `GET /tiles.json`: TileJSON 3.0.0 with absolute tile URLs (from the request `Host`, or `--public-url`), zoom range, bounds, center and `vector_layers`.
-* `GET /{z}/{x}/{y}.pbf`: the stored tile with `Content-Type: application/vnd.mapbox-vector-tile` and `Content-Encoding: gzip`; decompressed if the request's `Accept-Encoding` excludes gzip. XYZ `y` is converted to `tile_row = 2^z - 1 - y`. 404 for a missing tile, 400 for coordinates outside the zoom level.
-* Anything that is not a pbf MBTiles file is refused at startup with a clear message and exit 1.
+* `GET /{z}/{x}/{y}.pbf`: the stored tile with `Content-Type: application/vnd.mapbox-vector-tile` and `Content-Encoding: gzip`; decompressed if the request's `Accept-Encoding` excludes gzip. XYZ `y` is converted to `tile_row = 2^z - 1 - y`. 404 for a missing tile, 400 for coordinates outside the zoom level, 204 for an empty or NULL `tile_data`, and 500 when a coordinate has more than one row or a stored tile it must decompress is not valid gzip or inflates past 4 MiB.
+* Anything that is not a pbf MBTiles file is refused at startup with a clear message and exit 1: not SQLite, an empty or truncated file, no `metadata`, no `tiles` table or view, another `format`, or no `vector_layers`.
 
 ## Testing your own reader
 
@@ -226,6 +226,8 @@ Four valid archives (`root-none`, `root-gzip`, `leaves-gzip`, `exact-8192`), six
 
 The shared MVT corpus (`mvt/points.pmtiles`, `mvt/points.mbtiles`) is described [above](#same-tiles-through-pmtiles-and-xyz) and in [docs/fixtures.md](docs/fixtures.md#shared-mvt-corpus-added-in-generator-040).
 
+Fourteen MBTiles cases under `mbtiles/` (generator 0.5.0) are each one change from `mvt/points.mbtiles`: two valid files (`tiles` as a view, WAL mode) and twelve malformed ones (not SQLite, empty, truncated, no `metadata`, no `tiles`, wrong `format`, no `vector_layers`, a tile beyond `maxzoom`, a cut gzip tile, an uncompressed tile, a decompression bomb, two rows for one coordinate). The `mbtiles_archives` manifest section gives each file's validity and the outcomes a robust reader may have; the table in [docs/fixtures.md](docs/fixtures.md#mbtiles-cases-added-in-generator-050) also shows what `serve-xyz` and `tilecheck` do with each.
+
 Independent readers verify the valid archives: go-pmtiles v1.31.2 (all 60 manifest expectations of the four archives match), pmtiles npm 4.5.0 (all match under `normal` for the three 0.2.0 archives) and, for `exact-8192`, pmtiles-rs 0.24.0 over HTTP. See [docs/oracle.md](docs/oracle.md).
 
 ## Limits
@@ -249,7 +251,7 @@ The trace records only method, path, `Range`, `If-Match`, `If-None-Match`, `If-R
 
 * **Internal compression:** none and gzip are decoded. brotli and zstd are reported as `unsupported_compression`. Unknown values are reported as `unknown_compression`. Nothing is treated as uncompressed silently.
 * **Tile types:** the conformance fixtures are PNG and are compared as stored. The shared corpus is MVT (points only, one layer); `tilecheck` decodes MVT but is not a general vector tile validator (no clipping, winding or geometry validity checks).
-* **MBTiles:** `serve-xyz` reads `pbf` tilesets only (png, jpg, webp and others are refused). It checks the `format` and `json`/`vector_layers` metadata it needs, not the whole MBTiles specification. No UTFGrid, no multiple tilesets, no caching headers, no HTTPS.
+* **MBTiles:** `serve-xyz` reads `pbf` tilesets only (png, jpg, webp and others are refused). It checks the `format` and `json`/`vector_layers` metadata it needs and that `tiles` can be queried, not the whole MBTiles specification. A stored gzip tile goes to a client that accepts gzip unchecked, so a corrupt or oversized gzip member is caught by the client, or by `serve-xyz` only when it must decompress the tile. No UTFGrid, no multiple tilesets, no caching headers, no HTTPS.
 * **HTTP:** single byte ranges only. Multiple ranges get a 200 full response, which is allowed; multipart/byteranges is not implemented. HTTP/1.1 only, no TLS. A 200 without `Content-Length` is covered only by `ignore-range-no-length` (chunked for HTTP/1.1; close-delimited for an HTTP/1.0 request, which net/http answers and a test covers); 206 responses always carry `Content-Length`.
 * **Browsers:** pmtiles.js reads under all 20 scenarios are verified in headless Chromium 141.0.7390.37, Firefox 142.0.1 and WebKit 26.0 (Playwright 1.56.1 builds, Linux). The raw-`fetch` CORS check (`browser-cors.mjs`) is verified in that Chromium only. Other browser versions, headed browsers and other platforms (for example Safari on macOS) are unverified.
 * **Reader policy:** the lab reader does not reject duplicate tile IDs, trailing directory bytes or unclustered layouts; the spec does not forbid them. Header count mismatches are warnings.

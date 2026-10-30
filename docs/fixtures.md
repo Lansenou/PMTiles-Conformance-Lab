@@ -1,14 +1,14 @@
 # Fixture provenance
 
-Every file under `fixtures/` is written by `pmtiles-lab generate` (generator 0.4.0) from constants in `internal/fixtures`. Nothing is derived from real map data, third-party archives, screenshots or upstream sample tilesets.
+Every file under `fixtures/` is written by `pmtiles-lab generate` (generator 0.5.0) from constants in `internal/fixtures`. Nothing is derived from real map data, third-party archives, screenshots or upstream sample tilesets.
 
 * **Tiles (PMTiles conformance corpus):** solid-colour RGB PNGs (4x4 pixels, one 96x96 tile in `leaves-gzip` and one 48x52 tile in `exact-8192`). The generator assembles the PNG chunks by hand; pixel data is zlib with stored (uncompressed) deflate blocks. The colours are arbitrary constants.
 * **Metadata:** `{"name":"pmtiles-lab <fixture>","description":"Synthetic pmtiles-lab fixture. Solid-colour PNG tiles; not map data.","type":"overlay","version":"1.0.0"}`. The bounds are the full Web Mercator world; the center is 0,0.
-* **Compression:** gzip is a hand-written stored-block gzip member (mtime 0, OS 255). The decompression bomb is one hand-written fixed-Huffman deflate block. zstd frames in `unsupported-zstd` use raw blocks.
+* **Compression:** gzip is a hand-written stored-block gzip member (mtime 0, OS 255). The PMTiles decompression bomb is one hand-written fixed-Huffman deflate block; the MBTiles one (generator 0.5.0) is one hand-written dynamic-Huffman block whose only codes are a zero literal, the length-258 code and end of block, so each 258-byte match costs 2 bits. zstd frames in `unsupported-zstd` use raw blocks.
 * **Determinism:** the output does not depend on the Go version, time, locale or randomness. `TestGolden` pins the SHA-256 of every file, and `scripts/check.sh` regenerates the corpus and diffs it with the committed copy.
 * **Verification:** `cd fixtures && sha256sum --check SHA256SUMS`.
 * **License:** the generated fixtures, including `exact-8192` (added in 0.3.0), are original output of this repository's code and are covered by its Apache-2.0 license ([LICENSE](../LICENSE), attribution in [NOTICE](../NOTICE)).
-* **Versions:** generator 0.4.0 added the shared MVT corpus (`mvt/points.pmtiles`, `mvt/points.mbtiles`) and the optional `mvt_corpus` manifest section, below. Every archive of 0.3.0 has the same bytes and SHA-256 as before, and the `archives` list is unchanged; `manifest.json` and `SHA256SUMS` changed because of the new section, the new files and the generator version. Generator 0.3.0 added `exact-8192` only. Every archive of 0.2.0 has the same bytes and SHA-256 as before; `manifest.json` and `SHA256SUMS` changed because they list the new archive and the new generator version.
+* **Versions:** generator 0.5.0 added the 14 MBTiles cases under `mbtiles/` and the optional `mbtiles_archives` manifest section ([below](#mbtiles-cases-added-in-generator-050)). Every file of 0.4.0, `mvt/points.mbtiles` included, has the same bytes and SHA-256 as before, and `archives` and `mvt_corpus` are unchanged; `manifest.json` and `SHA256SUMS` changed because of the new section, the new files and the generator version. Generator 0.4.0 added the shared MVT corpus (`mvt/points.pmtiles`, `mvt/points.mbtiles`) and the optional `mvt_corpus` manifest section, below. Every archive of 0.3.0 has the same bytes and SHA-256 as before, and the `archives` list is unchanged; `manifest.json` and `SHA256SUMS` changed because of the new section, the new files and the generator version. Generator 0.3.0 added `exact-8192` only. Every archive of 0.2.0 has the same bytes and SHA-256 as before; `manifest.json` and `SHA256SUMS` changed because they list the new archive and the new generator version.
 
 ## Valid archives
 
@@ -75,7 +75,7 @@ One original vector tileset, packaged twice with identical stored tile bytes, so
 
 A reader that forgets to flip XYZ rows to TMS `tile_row` (or flips twice) gets wrong content at 2/2/1 and 2/2/2 and a wrong 404 or a wrong tile at 1/0/0, 1/0/1, 1/1/1, 2/1/0, 2/1/3 and 3/5/2; `TestDetectsMissingYFlip` pins that.
 
-**How it is made.** `internal/fixtures/mvtcorpus.go` lists the tiles and features. Hand-written encoders turn them into bytes: `mvt.go` (MVT protobuf), `encode.go` (stored-block gzip, mtime 0), `sqlite.go` (an SQLite 3 file with one leaf page per table or index, no overflow pages), and the existing PMTiles builder. The generator uses only the Go standard library, so no dependency version can change these bytes. The expected features in the manifest are taken from the tile list in the source, never decoded back from either file.
+**How it is made.** `internal/fixtures/mvtcorpus.go` lists the tiles and features. Hand-written encoders turn them into bytes: `mvt.go` (MVT protobuf), `encode.go` (stored-block gzip, mtime 0), `sqlite.go` (an SQLite 3 file with one leaf page per table or index; since generator 0.5.0 also views and overflow pages for rows larger than a page, which only the MBTiles bomb uses), and the existing PMTiles builder. The generator uses only the Go standard library, so no dependency version can change these bytes. The expected features in the manifest are taken from the tile list in the source, never decoded back from either file.
 
 **Manifest.** The top-level `mvt_corpus` object is new and optional (the schema stays `pmtiles-lab-manifest/1`, and `archives` is unchanged, so existing readers that ignore unknown fields are unaffected):
 
@@ -95,5 +95,51 @@ mvt_corpus: { name, description, content_rights, generator_inputs, tile_format: 
 * `verify/` (a separate Go module run by `scripts/check.sh`): decodes every tile of both files with `github.com/paulmach/orb/encoding/mvt` v0.12.0 and compares geometry and attributes with the manifest; opens the MBTiles file with the SQLite engine in `modernc.org/sqlite` v1.46.1 and checks `PRAGMA integrity_check`, `application_id`, the metadata rows, `json.vector_layers`, and every tile row at a TMS row it computes itself; checks that the PMTiles bytes at each manifest `archive_offset` equal the MBTiles row.
 * `scripts/oracle-go-pmtiles.sh`: go-pmtiles v1.31.2 `verify` accepts `mvt/points.pmtiles` and its `tile` command returns the manifest bytes for all 10 coordinates, absent ones included ([results/mvt-corpus-go-pmtiles-1.31.2.txt](results/mvt-corpus-go-pmtiles-1.31.2.txt)). This checks the header and root -> leaf lookup with a reader outside this repository.
 * `pmtiles-lab tilecheck` (this repository's own reader and MVT decoder) runs the same comparison through PMTiles and through XYZ; see the README.
+
+## MBTiles cases (added in generator 0.5.0)
+
+Fourteen MBTiles files under `fixtures/mbtiles/`, each one change from `mvt/points.mbtiles` (the base), for readers of MBTiles files and for servers that turn them into TileJSON and XYZ tiles. The manifest's `mbtiles_archives` list states the change, the file's validity with its source, and the outcomes a robust reader may have. `TestMBTilesOneChangeEach` pins each change against the base: the schema objects and rows that differ for a schema change, the byte ranges for a byte patch.
+
+| File | Bytes | Change from the base | SQLite / MBTiles | Robust reader | This lab (`serve-xyz`, then `tilecheck --tilejson`) |
+|---|---|---|---|---|---|
+| `valid/tiles-view` | 24576 | `tiles` is a view over `map` and `images` (the layout mbutil writes); unique `map_index` and `images_id` replace `tile_index` | valid / valid (views MAY be used) | open; every tile as in the corpus | pass |
+| `valid/wal-mode` | 16384 | header bytes 18 and 19 set to 2 (WAL mode); no `-wal` file, as after a full checkpoint | valid / valid | open; every tile as in the corpus | pass |
+| `malformed/not-sqlite` | 16384 | first byte of the header string `SQLite format 3` changed from `S` to `X` | invalid / invalid | refuse at open | refused at startup: `is not an SQLite 3 database` |
+| `malformed/empty-file` | 0 | 0 bytes | valid (SQLite opens it as an empty database) / invalid (no `metadata`, no `tiles`) | refuse at open | refused at startup: `is empty (0 bytes)` |
+| `malformed/truncated` | 12288 | cut after page 3 of 4; the header still says 4 pages | invalid / invalid | refuse at open | refused at startup: `database disk image is malformed` |
+| `malformed/no-metadata-table` | 12288 | `metadata` table removed | valid / invalid (MUST) | refuse at open | refused at startup: `no such table: metadata` |
+| `malformed/no-tiles-table` | 8192 | `tiles` table and its `tile_index` removed | valid / invalid (MUST) | refuse at open | refused at startup: `reading tiles table: ... no such table: tiles` |
+| `malformed/wrong-format` | 16384 | `format` `pbf` changed to `png`; tiles unchanged | valid / invalid | refuse at open | refused at startup: `format "png"; only pbf` |
+| `malformed/no-vector-layers` | 16384 | `json` row (`vector_layers`) removed | valid / invalid (MUST for pbf) | open and read every tile, or refuse at open | refused at startup: `needs a metadata json row with vector_layers` |
+| `malformed/zoom-range-mismatch` | 16384 | `maxzoom` 3 changed to 2; the z3 row 3/5/2 is kept | valid / invalid | open; 3/5/2 served or absent | pass (3/5/2 served; TileJSON says `maxzoom` 2) |
+| `malformed/corrupt-gzip` | 16384 | 1/1/1 cut to the first half of its gzip member | valid / invalid | open; an error for 1/1/1, never partial features | fail at 1/1/1: `gunzip: unexpected EOF`; `serve-xyz` answers 500 when it must decode it |
+| `malformed/mixed-gzip` | 16384 | 2/1/0 stored as the plain MVT | valid / invalid | open; 2/1/0 decoded or an error | pass (`serve-xyz` sends 2/1/0 without `Content-Encoding`) |
+| `malformed/decompression-bomb` | 81920 | 0/0/0 is a 65,568-byte gzip member that inflates to 67,633,153 zero bytes (64.5 MiB + 1), on 16 overflow pages | valid / invalid | open; an error for 0/0/0 within its own size limit | fail at 0/0/0: `decompressed tile exceeds 4194304 bytes`; `serve-xyz` answers 500 when it must decode it |
+| `malformed/duplicate-rows` | 16384 | a non-unique index replaces `tile_index`, and an extra row at 1/0/0 holds 1/1/1's bytes (rowid 1, read first) | valid / not addressed | open; an error for 1/0/0, or the first or last row's features | fail at 1/0/0: `serve-xyz` answers 500 (`more than one row`) |
+
+**Outcome words.** `expected_open` lists `ok` (open the file) and `refuse` (an error at open). A `tiles` entry lists the acceptable outcomes for one coordinate: `features:Z/X/Y` (the features of that corpus tile; a different coordinate means the bytes of another tile), `absent` and `refuse` (an error for that tile, never an empty or partial tile). A coordinate not listed must read as in `mvt_corpus`. `no-vector-layers` and `duplicate-rows` accept more than one outcome because the MBTiles specification does not decide them; this lab picks the strict one.
+
+**Manifest.** The top-level `mbtiles_archives` list is new and optional; the schema stays `pmtiles-lab-manifest/1`, and `archives` and `mvt_corpus` are unchanged:
+
+```
+mbtiles_archives: [ { name, file, kind: valid|malformed, sha256, size, base: "mvt/points.mbtiles", change, description,
+  validity: { sqlite: valid|invalid, mbtiles: valid|invalid|not-addressed, source },
+  expected_open: [ok|refuse],
+  tiles?: [ {z, x, y, tms_row, outcomes: [features:Z/X/Y|absent|refuse], purpose} ] } ]
+```
+
+`validity.source` quotes the rule: MBTiles 1.3 at mbtiles-spec 682fed79 (`1.3/spec.md`), the SQLite file format document, or RFC 1952.
+
+**WAL mode.** SQLite creates `-wal` and `-shm` files beside a WAL-mode database when it opens it, even read-only. The lab's tests open copies in temporary directories so the committed `fixtures/` directory never changes; do the same if your reader runs against a read-only or diffed checkout.
+
+**How it is made.** `internal/fixtures/mbtilescases.go` lists the 14 cases. A schema change edits the base schema (a table, index, view or row) before `sqlite.go` writes the file; a byte change patches the written base. The bomb is the dynamic-Huffman stream described under Compression, with a correct CRC-32 and ISIZE.
+
+**Verification, independent of the writer.**
+
+* `verify/mbtiles_cases_test.go` opens every case with the SQLite engine in `modernc.org/sqlite`. `not-sqlite` and `truncated` fail with the engine's own error; the others pass `PRAGMA integrity_check` and show their change (a view named `tiles`, `journal_mode` `wal`, the missing table or row, the cut gzip member, the uncompressed MVT decoded with orb, 67,633,153 inflated zero bytes, two rows in rowid order and a non-unique index). Every coordinate a case does not list holds the corpus bytes.
+* `cmd/pmtiles-lab/mbtiles_cases_test.go` runs `serve-xyz` and `tilecheck --tilejson --json` on every case, pins the lab column above, and checks that every observed outcome is one the manifest accepts.
+* `internal/fixtures/mbtilescases_test.go` reads rows larger than a page (overflow chains of 1 to 16 pages) back with the SQLite engine.
+
+**Deferred.** A locked database, a WAL file with uncheckpointed frames, and a gzip member with a wrong CRC-32 are not in the corpus yet.
 
 Hashes for every file are in [`fixtures/SHA256SUMS`](../fixtures/SHA256SUMS).

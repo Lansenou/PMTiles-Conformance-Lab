@@ -2,7 +2,7 @@
   "schema": "pmtiles-lab-manifest/1",
   "generator": {
     "name": "pmtiles-lab",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "spec": {
     "repository": "https://github.com/protomaps/PMTiles",
@@ -1336,5 +1336,324 @@
         }
       }
     ]
-  }
+  },
+  "mbtiles_archives": [
+    {
+      "name": "tiles-view",
+      "file": "mbtiles/valid/tiles-view.mbtiles",
+      "kind": "valid",
+      "sha256": "4af7261c7a2a2244a3fe310af7a3c5c98a551adfbadf4c201bd52a27e8536721",
+      "size": 24576,
+      "base": "mvt/points.mbtiles",
+      "change": "tiles is a view over map (zoom_level, tile_column, tile_row, tile_id) joined with images (tile_id, tile_data), the layout mbutil writes; unique indexes map_index and images_id replace tile_index",
+      "description": "The corpus tiles, read through a view named tiles. A reader must query tiles by name and not require a table; every corpus coordinate reads as in mvt_corpus.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "valid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md), Database: \"SQLite views that produce compatible results MAY be used instead.\""
+      },
+      "expected_open": [
+        "ok"
+      ]
+    },
+    {
+      "name": "wal-mode",
+      "file": "mbtiles/valid/wal-mode.mbtiles",
+      "kind": "valid",
+      "sha256": "30dff1bfe57f7d7234a655cb714fc8c5a590082af11594ec09fb25886b1a1544",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "header bytes 18 and 19 (file format write and read versions) set to 2, WAL mode; no -wal file, as after a full checkpoint",
+      "description": "A WAL-mode database with every change in the main file. A reader must read every corpus tile. SQLite may create the -wal and -shm files beside it when it opens it, even read-only; open a copy if that directory must not change.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "valid",
+        "source": "SQLite file format 1.3.3: versions 2 mean WAL (SQLite 3.7.0 or later); MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"Tilesets SHALL be valid SQLite databases of version 3.0.0 or higher.\""
+      },
+      "expected_open": [
+        "ok"
+      ]
+    },
+    {
+      "name": "not-sqlite",
+      "file": "mbtiles/malformed/not-sqlite.mbtiles",
+      "kind": "malformed",
+      "sha256": "47d7882bf4de372e99ed6b730acfa5388e77ecc5f3244e94afd46229ecb5f693",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "first byte of the header string \"SQLite format 3\\0\" changed from S to X",
+      "description": "Not an SQLite database. A reader must refuse it at open.",
+      "validity": {
+        "sqlite": "invalid",
+        "mbtiles": "invalid",
+        "source": "SQLite file format 1.3.1: every database file starts with \"SQLite format 3\\0\"; MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"Tilesets SHALL be valid SQLite databases\"."
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "empty-file",
+      "file": "mbtiles/malformed/empty-file.mbtiles",
+      "kind": "malformed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0,
+      "base": "mvt/points.mbtiles",
+      "change": "0 bytes",
+      "description": "SQLite opens a 0-byte file as an empty database, so the file has no tables. A reader must refuse it at open, never serve a tileset with every tile absent.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "SQLite opens a 0-byte file as an empty database; MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"The database MUST contain a table or view named metadata\" and \"a table named tiles\"."
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "truncated",
+      "file": "mbtiles/malformed/truncated.mbtiles",
+      "kind": "malformed",
+      "sha256": "260900b71c5036bf184bab15b8978219ff53165a49592eb4e420584c997102a2",
+      "size": 12288,
+      "base": "mvt/points.mbtiles",
+      "change": "file cut after page 3 of 4 (12288 bytes); the header still says 4 pages and the schema names page 4 as the root of tile_index",
+      "description": "A truncated database. A reader must refuse it at open (SQLite reports \"database disk image is malformed\" on the first query).",
+      "validity": {
+        "sqlite": "invalid",
+        "mbtiles": "invalid",
+        "source": "SQLite file format 1.3.7: the in-header size (4 pages) is valid because the change counter equals version-valid-for, and the file holds 3 pages; MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"Tilesets SHALL be valid SQLite databases\"."
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "no-metadata-table",
+      "file": "mbtiles/malformed/no-metadata-table.mbtiles",
+      "kind": "malformed",
+      "sha256": "393bfec423bd3e5e21667036de36faa4a77ee178455e5f60ad00b238c302a711",
+      "size": 12288,
+      "base": "mvt/points.mbtiles",
+      "change": "metadata table removed",
+      "description": "No name, format or vector_layers. A reader must refuse it at open.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"The database MUST contain a table or view named metadata.\""
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "no-tiles-table",
+      "file": "mbtiles/malformed/no-tiles-table.mbtiles",
+      "kind": "malformed",
+      "sha256": "5b5de618d235f4c59bfcd030bebc37527496261917154527a65e1065923215a8",
+      "size": 8192,
+      "base": "mvt/points.mbtiles",
+      "change": "tiles table and its tile_index removed",
+      "description": "Metadata without tiles. A reader must refuse it at open, never serve every tile as absent or fail tile by tile.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"The database MUST contain a table named tiles.\""
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "wrong-format",
+      "file": "mbtiles/malformed/wrong-format.mbtiles",
+      "kind": "malformed",
+      "sha256": "e353c52d4569262a7295c776b95b28d062f151bdc66d302be5662a45411721f1",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "metadata format pbf changed to png; tiles unchanged (gzip MVT)",
+      "description": "The format row does not describe the tiles. A vector tile reader must refuse it at open, not decode tiles labelled png.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): format is \"The file format of the tile data\"; the tile data is gzip-compressed MVT, which is pbf."
+      },
+      "expected_open": [
+        "refuse"
+      ]
+    },
+    {
+      "name": "no-vector-layers",
+      "file": "mbtiles/malformed/no-vector-layers.mbtiles",
+      "kind": "malformed",
+      "sha256": "61cedaa3b4132132d5924aeceb6e91a3f8ceea4dd9bcdd12bcb6452f7d6a1a90",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "metadata json row (vector_layers) removed",
+      "description": "A pbf tileset without layer metadata. A tolerant reader opens it and reads every tile as in mvt_corpus; a reader that needs vector_layers (for example to write TileJSON, which requires it) refuses it at open.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"If the format is pbf, the metadata table MUST contain this row: json\"."
+      },
+      "expected_open": [
+        "ok",
+        "refuse"
+      ]
+    },
+    {
+      "name": "zoom-range-mismatch",
+      "file": "mbtiles/malformed/zoom-range-mismatch.mbtiles",
+      "kind": "malformed",
+      "sha256": "02dcc05d3f3a28518ddaf6a565688cc447b6047d00b4f57f773a35d4d6d8b71a",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "metadata maxzoom 3 changed to 2; the z3 row 3/5/2 is kept",
+      "description": "Metadata says the tileset ends at z2 but a z3 tile exists. A reader may serve 3/5/2 or treat it as outside the tileset; every other tile reads as in mvt_corpus.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): the vector_layers maxzoom is 3, and \"the maxzoom MUST be less than or equal to the tileset's maxzoom\"; maxzoom is \"The highest zoom level for which the tileset provides data\"."
+      },
+      "expected_open": [
+        "ok"
+      ],
+      "tiles": [
+        {
+          "z": 3,
+          "x": 5,
+          "y": 2,
+          "tms_row": 5,
+          "outcomes": [
+            "features:3/5/2",
+            "absent"
+          ],
+          "purpose": "row above the metadata maxzoom"
+        }
+      ]
+    },
+    {
+      "name": "corrupt-gzip",
+      "file": "mbtiles/malformed/corrupt-gzip.mbtiles",
+      "kind": "malformed",
+      "sha256": "dbea21e17583866c134cae3888102305a7570a406da66f9e161f254bb09e0420",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "1/1/1 tile_data cut to the first half of its gzip member (no trailer)",
+      "description": "One tile with a truncated gzip stream. A reader must report an error for 1/1/1, never partial features, an empty tile or absent, and read the other tiles.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"pbf as a format refers to gzip-compressed vector tile data\"; the 1/1/1 member is incomplete (RFC 1952)."
+      },
+      "expected_open": [
+        "ok"
+      ],
+      "tiles": [
+        {
+          "z": 1,
+          "x": 1,
+          "y": 1,
+          "tms_row": 0,
+          "outcomes": [
+            "refuse"
+          ],
+          "purpose": "truncated gzip member"
+        }
+      ]
+    },
+    {
+      "name": "mixed-gzip",
+      "file": "mbtiles/malformed/mixed-gzip.mbtiles",
+      "kind": "malformed",
+      "sha256": "91ffe522c416fd381f87502a75c115d538daaef72a83fc7b9bfa96363b1ea755",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "2/1/0 tile_data stored as the plain MVT; every other tile gzip",
+      "description": "One uncompressed tile in a pbf tileset. A reader may see that the gzip magic is missing (no MVT starts with 0x1f) and decode it, or report an error; every other tile reads as in mvt_corpus.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"pbf as a format refers to gzip-compressed vector tile data\"."
+      },
+      "expected_open": [
+        "ok"
+      ],
+      "tiles": [
+        {
+          "z": 2,
+          "x": 1,
+          "y": 0,
+          "tms_row": 3,
+          "outcomes": [
+            "features:2/1/0",
+            "refuse"
+          ],
+          "purpose": "plain MVT in a gzip tileset"
+        }
+      ]
+    },
+    {
+      "name": "decompression-bomb",
+      "file": "mbtiles/malformed/decompression-bomb.mbtiles",
+      "kind": "malformed",
+      "sha256": "1dc97becf0477f36e58888fa18c1e2391310dd32be3af7a00a54228460bcf604",
+      "size": 81920,
+      "base": "mvt/points.mbtiles",
+      "change": "0/0/0 tile_data is one 65,568-byte gzip member that inflates to 67,633,153 zero bytes (64.5 MiB + 1), stored on 16 overflow pages",
+      "description": "A decompression bomb: a valid gzip member (one dynamic-Huffman block, about 1031:1, correct CRC-32 and ISIZE) whose content is not an MVT. A reader must stop at its own decompressed-size limit, report an error for 0/0/0 in bounded memory, and read the other tiles.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "invalid",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md): \"pbf as a format refers to gzip-compressed vector tile data in Mapbox Vector Tile format\"; the inflated content is zero bytes, not a protobuf message (field number 0 is not valid)."
+      },
+      "expected_open": [
+        "ok"
+      ],
+      "tiles": [
+        {
+          "z": 0,
+          "x": 0,
+          "y": 0,
+          "tms_row": 0,
+          "outcomes": [
+            "refuse"
+          ],
+          "purpose": "decompression bomb"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-rows",
+      "file": "mbtiles/malformed/duplicate-rows.mbtiles",
+      "kind": "malformed",
+      "sha256": "9dd98a236d24e219590a57e8b4bb8471069ec6c5a482f085eba373c423a50b60",
+      "size": 16384,
+      "base": "mvt/points.mbtiles",
+      "change": "unique tile_index replaced by a non-unique index; an extra row at 1/0/0 (tile_row 1) holding 1/1/1's tile_data, inserted first (rowid 1)",
+      "description": "Two rows for one coordinate. A reader should report an error for 1/0/0; one that takes the first row gets 1/1/1's features, one that takes the last gets 1/0/0's.",
+      "validity": {
+        "sqlite": "valid",
+        "mbtiles": "not-addressed",
+        "source": "MBTiles 1.3 (github.com/mapbox/mbtiles-spec 682fed79, 1.3/spec.md) has no rule against two rows at one coordinate; the unique tile_index is optional (\"The database MAY contain an index for efficient access to this table\")."
+      },
+      "expected_open": [
+        "ok"
+      ],
+      "tiles": [
+        {
+          "z": 1,
+          "x": 0,
+          "y": 0,
+          "tms_row": 1,
+          "outcomes": [
+            "refuse",
+            "features:1/0/0",
+            "features:1/1/1"
+          ],
+          "purpose": "two rows; the first holds 1/1/1's tile"
+        }
+      ]
+    }
+  ]
 }
