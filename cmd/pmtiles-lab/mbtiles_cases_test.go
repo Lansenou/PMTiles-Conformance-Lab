@@ -44,12 +44,15 @@ const emptySHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785
 // labOutcome names one tilecheck tile result in the manifest's words. An
 // empty tile (a 204, or a body of no bytes) is "empty", which no manifest
 // outcome list accepts: "refuse" means an error, never an empty tile.
+// tilecheck reports a 204 and an empty identity 200 as absent, so the
+// detail tells them from a 404.
 func labOutcome(tr tilecheck.TileResult) string {
 	switch {
+	case strings.HasSuffix(tr.Detail, " -> 204"), strings.HasSuffix(tr.Detail, " empty"),
+		tr.Observed == "present" && tr.SHA256 == emptySHA256:
+		return "empty"
 	case tr.Observed == "absent":
 		return "absent"
-	case strings.Contains(tr.Detail, " -> 204:"), tr.Observed == "present" && tr.SHA256 == emptySHA256:
-		return "empty"
 	case tr.Observed == "error", !tr.Match && len(tr.Features) == 0:
 		return "refuse" // an error response, or a body tilecheck could not decode
 	case tr.Match:
@@ -64,9 +67,10 @@ func TestLabOutcome(t *testing.T) {
 		tr   tilecheck.TileResult
 		want string
 	}{
-		{tilecheck.TileResult{Observed: "absent"}, "absent"},
+		{tilecheck.TileResult{Observed: "absent", Detail: "GET u -> 404"}, "absent"},
 		{tilecheck.TileResult{Observed: "error", Detail: "GET u -> 500: unexpected status"}, "refuse"},
-		{tilecheck.TileResult{Observed: "error", Detail: "GET u -> 204: unexpected status"}, "empty"},
+		{tilecheck.TileResult{Observed: "absent", Detail: "GET u -> 204"}, "empty"},
+		{tilecheck.TileResult{Observed: "absent", Detail: `GET u -> 200 content-type="application/vnd.mapbox-vector-tile" content-encoding="" empty`}, "empty"},
 		{tilecheck.TileResult{Observed: "present", SHA256: emptySHA256}, "empty"},
 		{tilecheck.TileResult{Observed: "present", SHA256: "ab", Detail: "gunzip: unexpected EOF"}, "refuse"},
 		{tilecheck.TileResult{Z: 1, X: 0, Y: 0, Observed: "present", SHA256: "ab", Features: feature, Match: true}, "features:1/0/0"},
