@@ -46,11 +46,11 @@ func hexSum(b []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
-// tileRows returns tile_data of every row at XYZ z/x/y in the order SQLite
-// returns them: through tile_index, rows with equal keys come in rowid order.
-func tileRows(t *testing.T, db *sql.DB, z, x, y uint32) [][]byte {
+// tileRows returns tile_data of every row at XYZ z/x/y, ordered by the SQL
+// clause order ("", or "ORDER BY rowid" where tiles is a table).
+func tileRows(t *testing.T, db *sql.DB, order string, z, x, y uint32) [][]byte {
 	t.Helper()
-	rows, err := db.Query("SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?", z, x, (1<<z)-1-y)
+	rows, err := db.Query("SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ? "+order, z, x, (1<<z)-1-y)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,13 +118,13 @@ var mbtilesCaseChecks = map[string]func(t *testing.T, db *sql.DB, corpus map[str
 		}
 	},
 	"zoom-range-mismatch": func(t *testing.T, db *sql.DB, corpus map[string]corpusTile) {
-		rows := tileRows(t, db, 3, 5, 2)
+		rows := tileRows(t, db, "", 3, 5, 2)
 		if s := queryString(t, db, "SELECT value FROM metadata WHERE name = 'maxzoom'"); s != "2" || len(rows) != 1 || hexSum(rows[0]) != corpus["3/5/2"].SHA256 {
 			t.Errorf("maxzoom %s, %d rows at 3/5/2", s, len(rows))
 		}
 	},
 	"corrupt-gzip": func(t *testing.T, db *sql.DB, corpus map[string]corpusTile) {
-		rows := tileRows(t, db, 1, 1, 1)
+		rows := tileRows(t, db, "", 1, 1, 1)
 		if len(rows) != 1 || uint64(len(rows[0])) != corpus["1/1/1"].Length/2 {
 			t.Fatalf("%d rows at 1/1/1", len(rows))
 		}
@@ -137,7 +137,7 @@ var mbtilesCaseChecks = map[string]func(t *testing.T, db *sql.DB, corpus map[str
 		}
 	},
 	"mixed-gzip": func(t *testing.T, db *sql.DB, corpus map[string]corpusTile) {
-		rows := tileRows(t, db, 2, 1, 0)
+		rows := tileRows(t, db, "", 2, 1, 0)
 		if len(rows) != 1 || rows[0][0] == 0x1f {
 			t.Fatalf("%d rows at 2/1/0", len(rows))
 		}
@@ -148,7 +148,7 @@ var mbtilesCaseChecks = map[string]func(t *testing.T, db *sql.DB, corpus map[str
 		}
 	},
 	"decompression-bomb": func(t *testing.T, db *sql.DB, _ map[string]corpusTile) {
-		rows := tileRows(t, db, 0, 0, 0)
+		rows := tileRows(t, db, "", 0, 0, 0)
 		if len(rows) != 1 || len(rows[0]) != 65568 {
 			t.Fatalf("%d rows at 0/0/0", len(rows))
 		}
@@ -175,9 +175,9 @@ var mbtilesCaseChecks = map[string]func(t *testing.T, db *sql.DB, corpus map[str
 		}
 	},
 	"duplicate-rows": func(t *testing.T, db *sql.DB, corpus map[string]corpusTile) {
-		rows := tileRows(t, db, 1, 0, 0)
+		rows := tileRows(t, db, "ORDER BY rowid", 1, 0, 0)
 		if len(rows) != 2 || hexSum(rows[0]) != corpus["1/1/1"].SHA256 || hexSum(rows[1]) != corpus["1/0/0"].SHA256 {
-			t.Errorf("%d rows at 1/0/0; want 1/1/1's bytes then 1/0/0's", len(rows))
+			t.Errorf("%d rows at 1/0/0; want 1/1/1's bytes then 1/0/0's, by rowid", len(rows))
 		}
 		if s := queryString(t, db, "SELECT \"unique\" FROM pragma_index_list('tiles') WHERE name = 'tile_index'"); s != "0" {
 			t.Errorf("tile_index unique %s", s)
@@ -241,7 +241,7 @@ func TestMBTilesCasesWithSQLite(t *testing.T) {
 				if listed[key] {
 					continue
 				}
-				rows := tileRows(t, db, tl.Z, tl.X, tl.Y)
+				rows := tileRows(t, db, "", tl.Z, tl.X, tl.Y)
 				if (tl.Status == "absent" && len(rows) != 0) || (tl.Status == "present" && (len(rows) != 1 || hexSum(rows[0]) != tl.SHA256)) {
 					t.Errorf("%s: %d rows, corpus status %s", key, len(rows), tl.Status)
 				}

@@ -102,10 +102,10 @@ Fourteen MBTiles files under `fixtures/mbtiles/`, each one change from `mvt/poin
 
 | File | Bytes | Change from the base | SQLite / MBTiles | Robust reader | This lab (`serve-xyz`, then `tilecheck --tilejson`) |
 |---|---|---|---|---|---|
-| `valid/tiles-view` | 24576 | `tiles` is a view over `map` and `images` (the layout mbutil writes); unique `map_index` and `images_id` replace `tile_index` | valid / valid (views MAY be used) | open; every tile as in the corpus | pass |
+| `valid/tiles-view` | 24576 | `tiles` is a view over `map` and `images` (modelled on the layout of mbutil); unique `map_index` and `images_id` replace `tile_index` | valid / valid (views MAY be used) | open; every tile as in the corpus | pass |
 | `valid/wal-mode` | 16384 | header bytes 18 and 19 set to 2 (WAL mode); no `-wal` file, as after a full checkpoint | valid / valid | open; every tile as in the corpus | pass |
 | `malformed/not-sqlite` | 16384 | first byte of the header string `SQLite format 3` changed from `S` to `X` | invalid / invalid | refuse at open | refused at startup: `is not an SQLite 3 database` |
-| `malformed/empty-file` | 0 | 0 bytes | valid (SQLite opens it as an empty database) / invalid (no `metadata`, no `tiles`) | refuse at open | refused at startup: `is empty (0 bytes)` |
+| `malformed/empty-file` | 0 | 0 bytes | valid (SQLite opens it as an empty database; engine behaviour, the file format document has no rule for it) / invalid (no `metadata`, no `tiles`) | refuse at open | refused at startup: `is empty (0 bytes)` |
 | `malformed/truncated` | 12288 | cut after page 3 of 4; the header still says 4 pages | invalid / invalid | refuse at open | refused at startup: `database disk image is malformed` |
 | `malformed/no-metadata-table` | 12288 | `metadata` table removed | valid / invalid (MUST) | refuse at open | refused at startup: `no such table: metadata` |
 | `malformed/no-tiles-table` | 8192 | `tiles` table and its `tile_index` removed | valid / invalid (MUST) | refuse at open | refused at startup: `reading tiles table: ... no such table: tiles` |
@@ -117,7 +117,7 @@ Fourteen MBTiles files under `fixtures/mbtiles/`, each one change from `mvt/poin
 | `malformed/decompression-bomb` | 81920 | 0/0/0 is a 65,568-byte gzip member that inflates to 67,633,153 zero bytes (64.5 MiB + 1), on 16 overflow pages | valid / invalid | open; an error for 0/0/0 within its own size limit | fail at 0/0/0: `decompressed tile exceeds 4194304 bytes`; `serve-xyz` answers 500 when it must decode it |
 | `malformed/duplicate-rows` | 16384 | a non-unique index replaces `tile_index`, and an extra row at 1/0/0 holds 1/1/1's bytes (rowid 1, read first) | valid / not addressed | open; an error for 1/0/0, or the first or last row's features | fail at 1/0/0: `serve-xyz` answers 500 (`more than one row`) |
 
-**Outcome words.** `expected_open` lists `ok` (open the file) and `refuse` (an error at open). A `tiles` entry lists the acceptable outcomes for one coordinate: `features:Z/X/Y` (the features of that corpus tile; a different coordinate means the bytes of another tile), `absent` and `refuse` (an error for that tile, never an empty or partial tile). A coordinate not listed must read as in `mvt_corpus`. `no-vector-layers` and `duplicate-rows` accept more than one outcome because the MBTiles specification does not decide them; this lab picks the strict one.
+**Outcome words.** `expected_open` lists `ok` (open the file) and `refuse` (an error at open). A `tiles` entry lists the acceptable outcomes for one coordinate: `features:Z/X/Y` (the features of that corpus tile; a different coordinate means the bytes of another tile), `absent` and `refuse` (an error for that tile, never an empty or partial tile). A coordinate not listed must read as in `mvt_corpus`. `no-vector-layers` and `duplicate-rows` accept more than one outcome because the MBTiles specification does not decide them; this lab picks the strict one. For the same reason `kind` `malformed` also covers `duplicate-rows`, whose `validity.mbtiles` is `not-addressed`.
 
 **Manifest.** The top-level `mbtiles_archives` list is new and optional; the schema stays `pmtiles-lab-manifest/1`, and `archives` and `mvt_corpus` are unchanged:
 

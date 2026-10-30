@@ -40,8 +40,10 @@ func openSQLite(t *testing.T, b []byte) *sql.DB {
 // many overflow pages) read back intact through the SQLite engine, and
 // integrity_check accepts the overflow chains.
 func TestSQLiteOverflowRows(t *testing.T) {
-	// A one-blob record of n bytes (4000 <= n < 8000) has a 3-byte header.
-	sizes := []int{4000, sqliteMaxTableLocal - 3, sqliteMaxTableLocal - 2, sqliteMinTableLocal + (sqlitePageSize - 4) + 100 - 3, 65568}
+	// A one-blob record of n bytes (58 <= n <= 8185) has a 3-byte header, so
+	// its payload P is n+3. K is the local size the overflow rule picks.
+	sizes := []int{4000, sqliteMaxTableLocal - 3, sqliteMaxTableLocal - 2, sqliteMinTableLocal + (sqlitePageSize - 4) + 100 - 3,
+		sqliteMaxTableLocal + (sqlitePageSize - 4) - 3, sqliteMinTableLocal + (sqlitePageSize - 4) - 3, 65568}
 	var s sqlSchema
 	var want [][]byte
 	for i, n := range sizes {
@@ -54,8 +56,9 @@ func TestSQLiteOverflowRows(t *testing.T) {
 			rows: [][]any{{b}}})
 	}
 	file := sqliteDB(s, 0)
-	// Overflow pages: none, none, 1 (M local), 1 (K local), 16.
-	if pages := len(file) / sqlitePageSize; pages != 1+len(sizes)+0+0+1+1+16 {
+	// Overflow pages: none (P < X), none (P = X), 1 (P = X+1, M local),
+	// 1 (K local), 1 (K = X), 1 (K = M, a full overflow page), 16.
+	if pages := len(file) / sqlitePageSize; pages != 1+len(sizes)+0+0+1+1+1+1+16 {
 		t.Errorf("%d pages", pages)
 	}
 	db := openSQLite(t, file)
@@ -113,7 +116,8 @@ func TestMBTilesDecompressionBomb(t *testing.T) {
 // schemaDiff lists what s changes in base: "+table x", "-index y",
 // "~index y" (other SQL or uniqueness), "+view v", and for a table in both,
 // "-name label" or "+name label" for each row only on one side, where label
-// is every column but the last, joined by "/".
+// is every column but the last, joined by "/". It does not see a change of
+// row order alone; TestGolden pins the bytes.
 func schemaDiff(base, s sqlSchema) []string {
 	objects := func(s sqlSchema) map[string]string {
 		m := map[string]string{}

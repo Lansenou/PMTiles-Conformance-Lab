@@ -116,7 +116,7 @@ func mbtilesCases() []mbtilesCase {
 		{
 			name: "tiles-view", kind: "valid",
 			change: "tiles is a view over map (zoom_level, tile_column, tile_row, tile_id) joined with images (tile_id, tile_data), " +
-				"the layout mbutil writes; unique indexes map_index and images_id replace tile_index",
+				"modelled on the map and images layout of mbutil; unique indexes map_index and images_id replace tile_index",
 			description: "The corpus tiles, read through a view named tiles. A reader must query tiles by name and not require a table; " +
 				"every corpus coordinate reads as in mvt_corpus.",
 			validity: MBTilesValidity{"valid", "valid",
@@ -176,7 +176,7 @@ func mbtilesCases() []mbtilesCase {
 			description: "SQLite opens a 0-byte file as an empty database, so the file has no tables. " +
 				"A reader must refuse it at open, never serve a tileset with every tile absent.",
 			validity: MBTilesValidity{"valid", "invalid",
-				"SQLite opens a 0-byte file as an empty database; " +
+				"SQLite opens a 0-byte file as an empty database (engine behaviour; the file format document has no rule for 0-byte files); " +
 					mbtilesSpec + ": \"The database MUST contain a table or view named metadata\" and \"a table named tiles\"."},
 			open:  refuse,
 			patch: func([]byte) []byte { return []byte{} },
@@ -300,7 +300,7 @@ func mbtilesCases() []mbtilesCase {
 			change: "unique tile_index replaced by a non-unique index; an extra row at 1/0/0 (tile_row 1) holding 1/1/1's tile_data, " +
 				"inserted first (rowid 1)",
 			description: "Two rows for one coordinate. A reader should report an error for 1/0/0; " +
-				"one that takes the first row gets 1/1/1's features, one that takes the last gets 1/0/0's.",
+				"one that takes the first row by rowid gets 1/1/1's features, one that takes the last gets 1/0/0's.",
 			validity: MBTilesValidity{"valid", "not-addressed",
 				mbtilesSpec + " has no rule against two rows at one coordinate; the unique tile_index is optional " +
 					"(\"The database MAY contain an index for efficient access to this table\")."},

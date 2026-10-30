@@ -193,6 +193,44 @@ func TestBadRequests(t *testing.T) {
 	}
 }
 
+// A NULL or empty tile_data is an empty tile (204), a tile over
+// mbtiles.MaxTileBytes is an error (500), and a missing row is 404.
+func TestEmptyNullAndOversizedTiles(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "x.mbtiles")
+	db, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{
+		"CREATE TABLE metadata (name text, value text)",
+		`INSERT INTO metadata VALUES ('format', 'pbf'), ('json', '{"vector_layers":[{"id":"points","fields":{}}]}')`,
+		"CREATE TABLE tiles (zoom_level integer, tile_column integer, tile_row integer, tile_data blob)",
+		// TMS rows: XYZ 1/0/0, 1/1/0 and 1/0/1.
+		"INSERT INTO tiles VALUES (1, 0, 1, NULL), (1, 1, 1, x''), (1, 0, 0, zeroblob(4194305))",
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	ts := server(t, p)
+	for _, c := range []struct {
+		path   string
+		status int
+		body   string
+	}{
+		{"/1/0/0.pbf", http.StatusNoContent, ""},
+		{"/1/1/0.pbf", http.StatusNoContent, ""},
+		{"/1/0/1.pbf", http.StatusInternalServerError, "tile 1/0/1 is 4194305 bytes, limit 4194304"},
+		{"/1/1/1.pbf", http.StatusNotFound, "no tile at 1/1/1"},
+	} {
+		resp, body := get(t, ts.URL+c.path)
+		if resp.StatusCode != c.status || !strings.Contains(string(body), c.body) || (c.body == "" && len(body) != 0) {
+			t.Errorf("%s: %d %q, want %d %q", c.path, resp.StatusCode, body, c.status, c.body)
+		}
+	}
+}
+
 // An MBTiles file written by the SQLite engine itself, with tiles as a view
 // over deduplicated tables (a common layout), is served too; a png tileset is
 // rejected with ErrUnsupported.

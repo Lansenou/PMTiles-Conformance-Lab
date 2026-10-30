@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lansenou/pmtiles-conformance-lab/internal/fixtures"
 	"github.com/lansenou/pmtiles-conformance-lab/internal/tilecheck"
 )
 
@@ -37,17 +38,44 @@ var labMBTiles = map[string]struct {
 	"duplicate-rows":      {result: "fail", tiles: map[string]string{"1/0/0": "-> 500: unexpected status"}},
 }
 
-// labOutcome names one tilecheck tile result in the manifest's words.
+// emptySHA256 is the SHA-256 of no bytes.
+const emptySHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+// labOutcome names one tilecheck tile result in the manifest's words. An
+// empty tile (a 204, or a body of no bytes) is "empty", which no manifest
+// outcome list accepts: "refuse" means an error, never an empty tile.
 func labOutcome(tr tilecheck.TileResult) string {
 	switch {
 	case tr.Observed == "absent":
 		return "absent"
+	case strings.Contains(tr.Detail, " -> 204:"), tr.Observed == "present" && tr.SHA256 == emptySHA256:
+		return "empty"
 	case tr.Observed == "error", !tr.Match && len(tr.Features) == 0:
 		return "refuse" // an error response, or a body tilecheck could not decode
 	case tr.Match:
 		return fmt.Sprintf("features:%d/%d/%d", tr.Z, tr.X, tr.Y)
 	}
 	return "other features"
+}
+
+func TestLabOutcome(t *testing.T) {
+	feature := []fixtures.ExpectedFeature{{Layer: "points"}}
+	for _, c := range []struct {
+		tr   tilecheck.TileResult
+		want string
+	}{
+		{tilecheck.TileResult{Observed: "absent"}, "absent"},
+		{tilecheck.TileResult{Observed: "error", Detail: "GET u -> 500: unexpected status"}, "refuse"},
+		{tilecheck.TileResult{Observed: "error", Detail: "GET u -> 204: unexpected status"}, "empty"},
+		{tilecheck.TileResult{Observed: "present", SHA256: emptySHA256}, "empty"},
+		{tilecheck.TileResult{Observed: "present", SHA256: "ab", Detail: "gunzip: unexpected EOF"}, "refuse"},
+		{tilecheck.TileResult{Z: 1, X: 0, Y: 0, Observed: "present", SHA256: "ab", Features: feature, Match: true}, "features:1/0/0"},
+		{tilecheck.TileResult{Observed: "present", SHA256: "ab", Features: feature}, "other features"},
+	} {
+		if got := labOutcome(c.tr); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.tr, got, c.want)
+		}
+	}
 }
 
 // TestMBTilesCasesThroughServeXYZ serves every MBTiles case from a generated
